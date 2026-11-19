@@ -100,6 +100,7 @@ fun ChatScreen(
     onModelChip: () -> Unit,
     input: TextFieldValue,
     onInput: (TextFieldValue) -> Unit,
+    onAppendSpeech: (String) -> Unit,
     modifier: Modifier = Modifier,
     memoryIds: Set<Long>? = null,
     onForgetMemory: (Long) -> Unit = {},
@@ -132,12 +133,13 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     val store = remember { AttachmentStore(context) }
     var attachOpen by paneState::attachOpen
+    val receiveAttachments = remember(vm, current) { vm.attachmentReceiver(current) }
     val attach = rememberAttachActions(
         store,
         room = { Attachment.MAX_PER_MESSAGE - vm.pending.value.size },
         onAdded = { added ->
             attachOpen = false
-            val extra = vm.attach(added)
+            val extra = receiveAttachments(added)
             if (extra.isNotEmpty()) {
                 scope.launch { store.discard(extra) }
                 Toast.makeText(context, tr("Up to ${Attachment.MAX_PER_MESSAGE} at a time, so ${extra.size} left out", "한 번에 ${Attachment.MAX_PER_MESSAGE}개까지라 ${extra.size}개는 빠졌어요"), Toast.LENGTH_SHORT).show()
@@ -178,6 +180,7 @@ fun ChatScreen(
             }
             pending.isNotEmpty() && (running || card != null) ->
                 Toast.makeText(context, tr("You can send photos and files when the current task finishes", "사진과 파일은 지금 작업이 끝나면 보낼 수 있어요"), Toast.LENGTH_SHORT).show()
+            runningHere -> Toast.makeText(context, tr("Your instruction is still here. Try Send again when the task finishes.", "지시가 입력창에 남아 있어요. 작업이 끝나면 다시 보내 주세요."), Toast.LENGTH_SHORT).show()
             running -> Toast.makeText(context, tr("You can send when the task in the other chat finishes", "다른 대화의 작업이 끝나면 보낼 수 있어요"), Toast.LENGTH_SHORT).show()
         }
     }
@@ -293,8 +296,10 @@ fun ChatScreen(
                 AttachSheet(attach)
             }
             Composer(
+                conversationId = current,
                 value = input,
                 onValueChange = onInput,
+                onAppendSpeech = onAppendSpeech,
                 placeholder = when {
                     card is ChatCard.Confirm -> tr("Say here if you want it different", "다르게 하려면 여기에 말해요")
                     card is ChatCard.Ask -> tr("You can type another answer", "다른 답을 써도 돼요")
@@ -309,11 +314,6 @@ fun ChatScreen(
                 showMic = card !is ChatCard.Confirm,
                 onSend = { submit() },
                 onStop = { vm.stop() },
-                onVoiceResult = { spoken ->
-                    val base = input.text.trimEnd()
-                    val text = if (base.isEmpty()) spoken else "$base $spoken"
-                    onInput(TextFieldValue(text, TextRange(text.length)))
-                },
                 focusRequester = focus,
                 attachOpen = attachOpen,
                 onAttach = { attachOpen = !attachOpen },

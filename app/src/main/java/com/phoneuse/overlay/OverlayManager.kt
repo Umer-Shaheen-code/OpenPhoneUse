@@ -15,6 +15,7 @@ import android.view.WindowManager
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
@@ -24,9 +25,13 @@ import com.phoneuse.assist.AssistVoiceActivity
 import com.phoneuse.assist.VoiceBridge
 import com.phoneuse.service.OverlayHooks
 import com.phoneuse.service.PhoneUseAccessibilityService
+import com.phoneuse.ui.chat.ConversationDrafts
+import com.phoneuse.ui.chat.ConversationDraft
+import com.phoneuse.ui.chat.appendSpeech
 import com.phoneuse.ui.theme.PhoneUseTheme
 import com.phoneuse.ui.theme.isDark
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
@@ -46,8 +51,8 @@ class OverlayManager(private val service: AccessibilityService) : OverlayHooks, 
     private val focusClears = MutableStateFlow(0)
 
     var onStop: () -> Unit = {}
-    var onSteer: (String) -> Unit = {}
-    override var onCardResult: (id: Long, result: String) -> Unit = { _, _ -> }
+    var onSteer: (String) -> Boolean = { false }
+    override var onCardResult: (id: Long, result: String) -> Boolean = { _, _ -> false }
     override var onClosed: () -> Unit = {}
 
     @Volatile
@@ -76,7 +81,9 @@ class OverlayManager(private val service: AccessibilityService) : OverlayHooks, 
     private var captureDepth = 0
 
     /** While the voice sheet is up for the dock's 🎤: the dock hides and touches pass to it. */
-    private var listening = false
+    private var voiceRequest: Int? = null
+    private val listening: Boolean get() = voiceRequest != null
+    private var closing = false
 
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) = Unit
@@ -90,19 +97,20 @@ class OverlayManager(private val service: AccessibilityService) : OverlayHooks, 
      * Adds the overlay's windows. Throws when the system refuses them (BadTokenException while the service is
      * between connections); then nothing stays added and a later show() tries again.
      */
-    fun show() = onMain {
+    fun show(conversationId: Long? = null) = onMain {
         if (shown || isClosed) return@onMain
         shown = true
+        closing = false
         owner.resume()
         try {
-            addWindows()
+            addWindows(conversationId)
         } catch (e: RuntimeException) {
             hide()
             throw e
         }
     }
 
-    private fun addWindows() {
+    private fun addWindows(conversationId: Long?) {
         val bp = fullScreenParams(touchable = true)
         val blockerView = View(service).apply { setOnTouchListener { _, _ -> true } }
         wm.addView(blockerView, bp)
@@ -132,17 +140,24 @@ class OverlayManager(private val service: AccessibilityService) : OverlayHooks, 
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
             title = "PhoneUse dock"
         }
+        // The standalone debug overlay has no conversation.
+        val draft = conversationId?.let { ConversationDrafts.state(it) } ?: ConversationDraft(TextFieldValue())
         val dockView = composeView {
             val s by state.collectAsState()
             val clears by focusClears.collectAsState()
             DockContent(
                 state = s,
+                draft = draft.value,
+                onDraftChange = { draft.value = it },
                 focusClears = clears,
                 onStop = { onStop() },
-                onSteer = { text -> routeDockText(state.value.card, text, onCardResult, onSteer) },
+                onSubmit = { card ->
+                    shown && !closing && card == state.value.card &&
+                        submitDockText(card, draft.value.text, onCardResult, onSteer)
+                },
                 onCardResult = { id, result -> onCardResult(id, result) },
                 onInputFocus = { setInputFocusable(it) },
-                onVoice = { startVoice() },
+                onVoice = { startVoice { draft.value = draft.value.appendSpeech(it) } },
             )
         }
         wm.addView(dockView, dp)
@@ -165,40 +180,40 @@ class OverlayManager(private val service: AccessibilityService) : OverlayHooks, 
         borderParams = null
         dockParams = null
         inputFocusable = false
-        // The run is over: a voice request still open must not hold up the next run's device calls.
-        if (listening) VoiceBridge.deliver(null)
-        listening = false
+        voiceRequest?.let(VoiceBridge::interrupt)
+        voiceRequest = null
         owner.pause()
     }
 
-    /**
-     * The dock's 🎤: runs the in-app voice sheet (through [AssistVoiceActivity], as the dock cannot receive
-     * activity results); the recognised text answers the open question card, or steers when there is none.
-     */
-    private fun startVoice() = onMain {
-        if (!shown || listening) return@onMain
+    /** On a normal return to chat let the current phrase finish before taking its microphone away. */
+    suspend fun finishInput(runJob: Job) {
+        closing = true
+        voiceRequest?.let { VoiceBridge.finishForRun(it, runJob) }
+    }
+
+    private fun startVoice(append: (String) -> Unit) = onMain {
+        if (!shown || closing || listening) return@onMain
         dropInputFocus()
-        listening = true
-        applyState()
-        VoiceBridge.request { text ->
+        val id = VoiceBridge.request { text ->
             onMain {
-                if (listening) {
-                    listening = false
+                if (voiceRequest != VoiceBridge.activeSession.value) {
+                    voiceRequest = null
                     applyState()
                 }
-                val said = text?.trim()
-                if (shown && !said.isNullOrEmpty()) routeDockText(state.value.card, said, onCardResult, onSteer)
+                if (!text.isNullOrBlank()) append(text)
             }
         }
+        voiceRequest = id
+        applyState()
         try {
             service.startActivity(
                 Intent(service, AssistVoiceActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
-                    .putExtra(AssistVoiceActivity.EXTRA_TO_BRIDGE, true),
+                    .putExtra(AssistVoiceActivity.EXTRA_BRIDGE_SESSION, id),
             )
         } catch (e: RuntimeException) {
             Log.w(TAG, "voice input could not start", e)
-            VoiceBridge.deliver(null)
+            VoiceBridge.deliver(id, null)
         }
     }
 

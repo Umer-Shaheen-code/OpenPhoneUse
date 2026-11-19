@@ -65,6 +65,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -150,14 +151,15 @@ private fun DrawScope.drawInnerGlow() {
 @Composable
 fun DockContent(
     state: AgentUiState,
+    draft: TextFieldValue,
+    onDraftChange: (TextFieldValue) -> Unit,
     focusClears: Int,
     onStop: () -> Unit,
-    onSteer: (String) -> Unit,
+    onSubmit: (DockCard?) -> Boolean,
     onCardResult: (id: Long, result: String) -> Unit,
     onInputFocus: (Boolean) -> Unit,
     onVoice: () -> Unit = {},
 ) {
-    var text by remember { mutableStateOf("") }
     var wantKeyboard by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -185,8 +187,8 @@ fun DockContent(
 
     // Text typed while a question card is open answers that card (with its id); otherwise it steers.
     fun send() {
-        if (!submitDockText(state.card, text, onCardResult, onSteer)) return
-        text = ""
+        if (!onSubmit(state.card)) return
+        onDraftChange(TextFieldValue())
         focusManager.clearFocus()
     }
 
@@ -221,8 +223,8 @@ fun DockContent(
         ) {
             val input: @Composable (String, Boolean) -> Unit = { placeholder, stopInPill ->
                 InputPill(
-                    text = text,
-                    onText = { text = it },
+                    draft = draft,
+                    onText = onDraftChange,
                     placeholder = placeholder,
                     stopInPill = stopInPill,
                     onSend = { send() },
@@ -326,8 +328,8 @@ private fun LogLines(state: AgentUiState) {
 
 @Composable
 private fun InputPill(
-    text: String,
-    onText: (String) -> Unit,
+    draft: TextFieldValue,
+    onText: (TextFieldValue) -> Unit,
     placeholder: String,
     stopInPill: Boolean,
     onSend: () -> Unit,
@@ -336,6 +338,7 @@ private fun InputPill(
     onVoice: () -> Unit,
 ) {
     val c = pu
+    val text = draft.text
     Row(
         Modifier
             .fillMaxWidth()
@@ -348,7 +351,7 @@ private fun InputPill(
         Box(Modifier.weight(1f).padding(start = 14.dp, end = 8.dp, top = 9.dp, bottom = 9.dp)) {
             if (text.isEmpty()) Text(placeholder, fontSize = 15.sp, color = c.textSub, maxLines = 1)
             BasicTextField(
-                value = text,
+                value = draft,
                 onValueChange = onText,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -361,8 +364,7 @@ private fun InputPill(
                 keyboardActions = KeyboardActions(onSend = { onSend() }),
             )
         }
-        // 🎤: the spoken answer goes where typed text would (the open question, else steering).
-        if (text.isBlank()) IconBtn(PuIcons.Mic, tr("Voice input", "음성 입력"), onClick = onVoice, tint = c.textSub, modifier = Modifier.size(48.dp))
+        IconBtn(PuIcons.Mic, tr("Voice input", "음성 입력"), onClick = onVoice, tint = c.textSub, modifier = Modifier.size(48.dp))
         if (stopInPill && text.isBlank()) {
             Box(
                 Modifier

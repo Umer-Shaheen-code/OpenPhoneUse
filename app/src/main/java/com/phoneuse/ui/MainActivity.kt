@@ -69,6 +69,9 @@ import com.phoneuse.ui.cards.LocalCardStates
 import androidx.compose.runtime.CompositionLocalProvider
 import com.phoneuse.ui.chat.ChatScreen
 import com.phoneuse.ui.chat.ChatViewModel
+import com.phoneuse.ui.chat.ConversationDrafts
+import com.phoneuse.ui.chat.appendSpeech
+import com.phoneuse.ui.chat.rememberConversationDraft
 import com.phoneuse.ui.chat.DrawerContent
 import com.phoneuse.ui.chat.ModelChoices
 import com.phoneuse.ui.chat.ModelSheet
@@ -321,7 +324,11 @@ private fun AppRoot(
         ChatViewModel(
             AppGraph.chats, AppGraph.runner.asChatRunner(), scope,
             onTypedAsk = { text, id -> ProactiveSystem.get(context).typed(text, id) },
-            onDeleted = { ProactiveSystem.get(context).conversationsGone(it) },
+            onDraftMoved = ConversationDrafts::move,
+            onDeleted = {
+                ConversationDrafts.forget(it)
+                ProactiveSystem.get(context).conversationsGone(it)
+            },
         )
     }
 
@@ -330,13 +337,15 @@ private fun AppRoot(
     var savedCurrent by rememberSaveable { mutableStateOf<Long?>(null) }
     var savedFollowing by rememberSaveable { mutableStateOf(false) }
     var savedStale by rememberSaveable { mutableStateOf<Long?>(null) }
+    var savedMoveDraft by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(vm) {
         val restore = savedCurrent
-        if (restore != null) vm.select(restore) else if (savedFollowing) vm.resumeFollowing(savedStale)
+        if (restore != null) vm.select(restore) else if (savedFollowing) vm.resumeFollowing(savedStale, savedMoveDraft)
         launch {
             vm.followingNew.collect {
                 savedFollowing = it
                 savedStale = vm.followStale
+                savedMoveDraft = vm.moveDraftOnFollow
             }
         }
         vm.current.collect {
@@ -506,10 +515,8 @@ private fun AppRoot(
     BackHandler(enabled = screen == Screen.NUDGES) { screen = Screen.SETTINGS }
     val routineList by remember { com.phoneuse.routine.RoutineSystem.get(context).store.routines }.collectAsState()
 
-    // The composer draft lives here, and the chat pane is movable content, so folding or unfolding (which
-    // moves the pane between the drawer layout and the two-pane layout) keeps the draft, the scroll
-    // position and a pending voice-input result.
-    var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
+    val draftState = rememberConversationDraft(current)
+    var draft by draftState::value
     // A home-screen widget's prompt: started like text from the composer (typed) or a card button (chips, tiles),
     // so every confirmation still applies. While a run is going it waits in the composer instead.
     LaunchedEffect(promptRequest) {
@@ -525,11 +532,11 @@ private fun AppRoot(
             else -> vm.startTyped(p.text)
         }
         if (!started) {
-            if (p.typed) draft = TextFieldValue(p.text)
+            if (p.typed) ConversationDrafts.state(vm.current.value).value = TextFieldValue(p.text)
             Toast.makeText(context, tr("You can do that when the current task finishes", "지금 작업이 끝나면 할 수 있어요"), Toast.LENGTH_SHORT).show()
         }
     }
-    val chatPane = remember(vm) {
+    val chatPane = remember(vm, draftState) {
         movableContentOf { showMenu: Boolean, modifier: Modifier, layout: ChatPaneLayout ->
             ChatScreen(
                 vm = vm,
@@ -540,6 +547,7 @@ private fun AppRoot(
                 onModelChip = { sheetOpen = true },
                 input = draft,
                 onInput = { draft = it },
+                onAppendSpeech = { draft = draft.appendSpeech(it) },
                 modifier = modifier,
                 memoryIds = memoryIds,
                 onForgetMemory = { memoryId -> memoryAction { AppGraph.memories.delete(memoryId) } },
@@ -771,8 +779,16 @@ private fun AppRoot(
                         onAction = onResultAction,
                         runningHere = runningHere,
                         liveSteps = liveSteps,
-                        onVoice = { spoken ->
-                            if (!vm.send(spoken)) Toast.makeText(context, tr("You can speak when the task in the other chat finishes", "다른 대화의 작업이 끝나면 말할 수 있어요"), Toast.LENGTH_SHORT).show()
+                        conversationId = current,
+                        draft = draft,
+                        onInput = { draft = it },
+                        onAppendSpeech = { draft = draft.appendSpeech(it) },
+                        onSend = {
+                            if (vm.send(draft.text)) {
+                                draft = TextFieldValue("")
+                            } else {
+                                Toast.makeText(context, tr("You can do that when the current task finishes", "지금 작업이 끝나면 할 수 있어요"), Toast.LENGTH_SHORT).show()
+                            }
                         },
                         onStop = { vm.stop() },
                         modifier = Modifier.fillMaxSize().windowInsetsPadding(topInsets),
