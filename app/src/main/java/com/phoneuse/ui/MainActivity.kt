@@ -69,8 +69,10 @@ import com.phoneuse.ui.cards.LocalCardStates
 import androidx.compose.runtime.CompositionLocalProvider
 import com.phoneuse.ui.chat.ChatScreen
 import com.phoneuse.ui.chat.ChatViewModel
+import com.phoneuse.ui.chat.ConversationDraft
 import com.phoneuse.ui.chat.ConversationDrafts
 import com.phoneuse.ui.chat.appendSpeech
+import com.phoneuse.ui.chat.rememberAttachActions
 import com.phoneuse.ui.chat.rememberConversationDraft
 import com.phoneuse.ui.chat.DrawerContent
 import com.phoneuse.ui.chat.ModelChoices
@@ -536,18 +538,23 @@ private fun AppRoot(
             Toast.makeText(context, tr("You can do that when the current task finishes", "지금 작업이 끝나면 할 수 있어요"), Toast.LENGTH_SHORT).show()
         }
     }
-    val chatPane = remember(vm, draftState) {
-        movableContentOf { showMenu: Boolean, modifier: Modifier, layout: ChatPaneLayout ->
+    // The picker and import scope survive even when a fold layout temporarily has no chat pane.
+    val attach = rememberAttachActions(vm, chatPaneState)
+    val chatPane = remember(vm, attach) {
+        movableContentOf { showMenu: Boolean, modifier: Modifier, layout: ChatPaneLayout, composer: Pair<Long?, ConversationDraft> ->
+            val (owner, ownerDraft) = composer
             ChatScreen(
                 vm = vm,
+                current = owner,
+                attach = attach,
                 model = model,
                 fast = fast && authMode?.let { ModelProviders.supportsFast(it) } == true,
                 showMenuButton = showMenu,
                 onMenu = { scope.launch { drawerState.open() } },
                 onModelChip = { sheetOpen = true },
-                input = draft,
-                onInput = { draft = it },
-                onAppendSpeech = { draft = draft.appendSpeech(it) },
+                input = ownerDraft.value,
+                onInput = { ownerDraft.value = it },
+                onAppendSpeech = { ownerDraft.value = ownerDraft.value.appendSpeech(it) },
                 modifier = modifier,
                 memoryIds = memoryIds,
                 onForgetMemory = { memoryId -> memoryAction { AppGraph.memories.delete(memoryId) } },
@@ -767,7 +774,7 @@ private fun AppRoot(
                         }
                         Box(Modifier.width(1.dp).fillMaxHeight().background(c.line))
                         Box(Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(topInsets), contentAlignment = Alignment.TopCenter) {
-                            chatPane(false, Modifier.widthIn(max = 560.dp), ChatPaneLayout.NORMAL)
+                            chatPane(false, Modifier.widthIn(max = 560.dp), ChatPaneLayout.NORMAL, current to draftState)
                         }
                     }
                     // Board UnfoldedFlex: the whole screen; opening the device flat again returns to the chat.
@@ -804,7 +811,7 @@ private fun AppRoot(
                                 Box(Modifier.width(1.dp).fillMaxHeight().background(c.line))
                             }
                             Box(Modifier.width(chatColumn).fillMaxHeight().windowInsetsPadding(topInsets)) {
-                                chatPane(!fold.listRail, Modifier.fillMaxSize(), ChatPaneLayout.BESIDE_RESULT)
+                                chatPane(!fold.listRail, Modifier.fillMaxSize(), ChatPaneLayout.BESIDE_RESULT, current to draftState)
                             }
                             Box(Modifier.width(1.dp).fillMaxHeight().background(c.line))
                             ResultPane(card, onResultAction, Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(topInsets))
@@ -815,7 +822,7 @@ private fun AppRoot(
                         Box(Modifier.fillMaxSize().background(c.bg).windowInsetsPadding(topInsets)) {
                             // Board UnfoldedSplit: a small window beside the app being operated shows the progress only.
                             val layout = if (fold.mode == FoldMode.SPLIT_PROGRESS) ChatPaneLayout.PROGRESS else ChatPaneLayout.NORMAL
-                            chatPane(true, Modifier.fillMaxSize(), layout)
+                            chatPane(true, Modifier.fillMaxSize(), layout, current to draftState)
                         }
                     }
                 }

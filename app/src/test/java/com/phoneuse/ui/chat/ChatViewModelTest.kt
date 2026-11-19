@@ -6,6 +6,7 @@ import com.phoneuse.chat.ChatRepository
 import com.phoneuse.chat.InMemoryChatRepository
 import com.phoneuse.chat.MessageRole
 import com.phoneuse.chat.StepLog
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -192,12 +193,48 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun inFlightImportKeepsItsDraftWhenSwitchingConversations() = runTest(UnconfinedTestDispatcher()) {
+        val (repo, _, vm) = setup()
+        val source = repo.createConversation("Source")
+        val other = repo.createConversation("Other")
+        vm.select(source)
+        val draft = vm.attachmentDraft()
+        val imported = CompletableDeferred<List<Attachment>>()
+        val import = launch { assertTrue(vm.attachTo(draft, imported.await()).isEmpty()) }
+
+        vm.select(other)
+        val existing = Attachment.image("other.jpg")
+        vm.attach(listOf(existing))
+        val file = Attachment.image("pdf-page.jpg")
+        imported.complete(listOf(file))
+        import.join()
+
+        assertEquals(listOf(existing), vm.pending.value)
+        vm.select(source)
+        assertEquals(listOf(file), vm.pending.value)
+    }
+
+    @Test
+    fun completedImportForDeletedConversationIsReturnedForCleanup() = runTest(UnconfinedTestDispatcher()) {
+        val (repo, _, vm) = setup()
+        val source = repo.createConversation("Source")
+        vm.select(source)
+        val draft = vm.attachmentDraft()
+
+        vm.delete(source)
+        val files = listOf(Attachment.image("pdf-page.jpg"))
+
+        assertEquals(files, vm.attachTo(draft, files))
+        assertTrue(vm.pending.value.isEmpty())
+    }
+
+    @Test
     fun followUpsAndLateFileImportsMoveWithTheNewComposer() = runTest(UnconfinedTestDispatcher()) {
         val repo = InMemoryChatRepository()
         val runner = FakeRunner(repo, backgroundScope).apply { createsConversation = false }
         val moves = mutableListOf<Pair<Long?, Long>>()
         val vm = ChatViewModel(repo, runner, backgroundScope, onDraftMoved = { from, to -> moves += from to to })
-        val receive = vm.attachmentReceiver(null)
+        val draft = vm.attachmentDraft()
         val first = Attachment.image("first.jpg")
         val followUp = Attachment.image("follow-up.jpg")
         vm.attach(listOf(first))
@@ -208,7 +245,7 @@ class ChatViewModelTest {
         assertEquals(listOf<Pair<Long?, Long>>(null to id), moves)
         val other = repo.createConversation("Other")
         vm.select(other)
-        assertTrue(receive(listOf(followUp)).isEmpty())
+        assertTrue(vm.attachTo(draft, listOf(followUp)).isEmpty())
         assertTrue(vm.pending.value.isEmpty())
         vm.newChat()
         assertTrue(vm.pending.value.isEmpty())

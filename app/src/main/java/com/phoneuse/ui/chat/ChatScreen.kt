@@ -93,6 +93,8 @@ enum class ChatPaneLayout {
 @Composable
 fun ChatScreen(
     vm: ChatViewModel,
+    current: Long?,
+    attach: AttachActions,
     model: String,
     fast: Boolean,
     showMenuButton: Boolean,
@@ -114,7 +116,6 @@ fun ChatScreen(
     paneState: ChatPaneState = remember { ChatPaneState() },
 ) {
     val c = pu
-    val current by vm.current.collectAsState()
     val messages by vm.messages.collectAsState()
     val conversations by vm.conversations.collectAsState()
     val live by vm.live.collectAsState()
@@ -133,19 +134,6 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     val store = remember { AttachmentStore(context) }
     var attachOpen by paneState::attachOpen
-    val receiveAttachments = remember(vm, current) { vm.attachmentReceiver(current) }
-    val attach = rememberAttachActions(
-        store,
-        room = { Attachment.MAX_PER_MESSAGE - vm.pending.value.size },
-        onAdded = { added ->
-            attachOpen = false
-            val extra = receiveAttachments(added)
-            if (extra.isNotEmpty()) {
-                scope.launch { store.discard(extra) }
-                Toast.makeText(context, tr("Up to ${Attachment.MAX_PER_MESSAGE} at a time, so ${extra.size} left out", "한 번에 ${Attachment.MAX_PER_MESSAGE}개까지라 ${extra.size}개는 빠졌어요"), Toast.LENGTH_SHORT).show()
-            }
-        },
-    )
     val focus = remember { FocusRequester() }
     var focusRequest by remember { mutableStateOf(0) }
     LaunchedEffect(focusRequest) {

@@ -53,6 +53,11 @@ interface ChatRunner {
 
 private val NO_SEARCHES: StateFlow<Int> = MutableStateFlow(0)
 
+internal class AttachmentDraft {
+    val files = MutableStateFlow<List<Attachment>>(emptyList())
+    val room: Int get() = Attachment.MAX_PER_MESSAGE - files.value.size
+}
+
 fun AgentRunner.asChatRunner(): ChatRunner {
     val runner = this
     return object : ChatRunner {
@@ -113,28 +118,28 @@ class ChatViewModel(
             running && current != null && active == current && msgs.lastOrNull()?.role == MessageRole.USER
         }.stateIn(scope, SharingStarted.Eagerly, false)
 
-    private val attachmentDrafts = mutableMapOf<Long?, MutableStateFlow<List<Attachment>>>()
+    private val attachmentDrafts = mutableMapOf<Long?, AttachmentDraft>()
 
-    private fun filesFor(id: Long?) = attachmentDrafts.getOrPut(id) { MutableStateFlow(emptyList()) }
+    private fun draftFor(id: Long?) = attachmentDrafts.getOrPut(id, ::AttachmentDraft)
 
     /** Attachments of the visible draft. Reads during Send use its exact owner even before the UI redraws. */
-    val pending = current.flatMapLatest { filesFor(it) }
+    val pending = current.flatMapLatest { draftFor(it).files }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    /** Bind imports to the originating composer, even if picking a file outlasts conversation assignment. */
-    internal fun attachmentReceiver(id: Long?): (List<Attachment>) -> List<Attachment> {
-        val draft = filesFor(id)
-        return { list ->
-            val room = (Attachment.MAX_PER_MESSAGE - draft.value.size).coerceAtLeast(0)
-            draft.value += list.take(room)
-            list.drop(room)
-        }
+    /** An import holds this draft through navigation and through assignment of a new conversation ID. */
+    internal fun attachmentDraft(): AttachmentDraft = draftFor(_current.value)
+
+    internal fun attachTo(draft: AttachmentDraft, list: List<Attachment>): List<Attachment> {
+        if (draft !in attachmentDrafts.values) return list // The conversation was deleted while importing.
+        val room = draft.room
+        draft.files.value += list.take(room)
+        return list.drop(room)
     }
 
-    fun attach(list: List<Attachment>): List<Attachment> = attachmentReceiver(_current.value)(list)
+    fun attach(list: List<Attachment>): List<Attachment> = attachTo(attachmentDraft(), list)
 
     fun detach(attachment: Attachment) {
-        filesFor(_current.value).value -= attachment
+        attachmentDraft().files.value -= attachment
     }
 
     /** Set when a send started a new conversation; the screen follows it once the runner has created it. */
@@ -271,7 +276,7 @@ class ChatViewModel(
      */
     fun send(text: String): Boolean {
         val t = text.trim()
-        val draft = filesFor(_current.value)
+        val draft = attachmentDraft().files
         val files = draft.value
         if (t.isEmpty() && files.isEmpty()) return false
         val open = runner.card.value
@@ -377,7 +382,7 @@ class ChatViewModel(
 
     fun deleteAll() {
         newChat()
-        attachmentDrafts.values.forEach { it.value = emptyList() }
+        attachmentDrafts.values.forEach { it.files.value = emptyList() }
         attachmentDrafts.keys.removeAll { it != null }
         scope.launch {
             // The run ends (and makes its last writes) before anything is deleted.
