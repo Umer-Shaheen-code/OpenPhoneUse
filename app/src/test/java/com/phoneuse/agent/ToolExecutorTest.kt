@@ -306,7 +306,7 @@ class ToolExecutorTest {
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    @Test fun everyScreenReadMasksANewlyProtectedViewInBothModes() = runTest {
+    @Test fun aFailedScreenReadWithholdsTheViewAndAsksForGetScreenInBothModes() = runTest {
         for (images in listOf(true, false)) {
             for (tool in listOf("get_screen", "wait", "screenshot")) {
                 if (!images && tool == "screenshot") continue
@@ -316,7 +316,8 @@ class ToolExecutorTest {
                 device.screenshotResult = null
                 val time = testScheduler.currentTime
                 val result = executor.execute(call(tool, if (tool == "wait") """{"ms":0}""" else "{}"), seen)
-                assertTrue(result.output, result.output.contains(ToolExecutor.PROTECTED))
+                assertTrue(result.output, result.output.contains("get_screen"))
+                assertFalse(result.output, result.output.contains(ToolExecutor.PROTECTED))
                 assertFalse(result.output, result.output.contains("Private panel"))
                 assertNull(result.screenshot)
                 val masked = requireNotNull(result.screen)
@@ -324,9 +325,35 @@ class ToolExecutorTest {
                 assertFalse(masked.text.contains("Private panel"))
                 assertEquals("A failed capture in a previously visible app must stop immediately", time, testScheduler.currentTime)
                 device.screenshotResult = byteArrayOf(1)
-                val next = executor.observe()
+                val next = executor.execute(call("get_screen", "{}"), masked)
                 assertTrue(next.output, next.output.contains("Private panel"))
             }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun getScreenReportsProtectionOnlyAfterTheDelayedRetryConfirmsIt() = runTest {
+        val (device, _, executor) = setup()
+        val seen = executor.observe().screen
+        device.screenshotResult = null
+        val time = testScheduler.currentTime
+        val failed = executor.execute(call("get_screen", "{}"), seen)
+        assertTrue(failed.output, failed.output.contains("get_screen"))
+        assertEquals(time, testScheduler.currentTime)
+
+        val confirmed = executor.execute(call("get_screen", "{}"), failed.screen)
+        assertTrue(confirmed.output, confirmed.output.contains(ToolExecutor.PROTECTED))
+        assertEquals(time + 400L, testScheduler.currentTime)
+    }
+
+    @Test fun aFailedRetryOnAnUnknownOrDifferentAppDoesNotConfirmProtection() = runTest {
+        for (later in listOf(base.copy(packageName = null), base.copy(packageName = "other.app"))) {
+            val (device, _, executor) = setup(base, later)
+            device.screenshotResult = null
+            val result = executor.observe()
+            assertTrue(result.output, result.output.contains("get_screen"))
+            assertFalse(result.output, result.output.contains(ToolExecutor.PROTECTED))
+            assertTrue(requireNotNull(result.screen).captureBlocked)
         }
     }
 
@@ -343,7 +370,8 @@ class ToolExecutorTest {
             device.calls.clear()
             for (action in listOf(scroll, batch)) {
                 val stopped = executor.execute(action, masked)
-                assertTrue(stopped.output, stopped.output.contains(ToolExecutor.PROTECTED))
+                assertTrue(stopped.output, stopped.output.contains("get_screen"))
+                assertFalse(stopped.output, stopped.output.contains(ToolExecutor.PROTECTED))
                 assertNull(stopped.screenshot)
             }
             assertTrue(device.calls.toString(), device.calls.isEmpty())
@@ -376,14 +404,14 @@ class ToolExecutorTest {
     @Test fun standaloneAndBatchedScreenActionsRespectTheLiveCaptureInBothModes() = runTest {
         for (images in listOf(true, false)) {
             for (batched in listOf(true, false)) {
-                val device = FakeDeviceController(listOf(base))
+                val device = FakeDeviceController(listOf(base, snap("Changed view")))
                 val executor = ToolExecutor(device, FakeUserGate(), screenshots = images)
                 val seen = executor.observe().screen
                 device.screenshotResult = null
                 val action = if (batched) call("batch", """{"actions":[{"tool":"scroll","args":{"direction":"down"}}]}""")
                     else call("scroll", """{"direction":"down"}""")
                 val result = executor.execute(action, seen)
-                assertTrue(result.output, result.output.contains(ToolExecutor.PROTECTED))
+                assertTrue(result.output, result.output.contains("get_screen"))
                 assertFalse(device.calls.any { it.startsWith("scroll(") })
             }
         }
@@ -400,7 +428,7 @@ class ToolExecutorTest {
         val executor = ToolExecutor(device, gate)
         val seen = executor.observe().screen
         val result = executor.execute(call("tap", """{"index":3}"""), seen)
-        assertTrue(result.output, result.output.contains(ToolExecutor.PROTECTED))
+        assertTrue(result.output, result.output.contains("get_screen"))
         assertTrue(device.calls.none { it.startsWith("tap(") })
     }
 
@@ -412,7 +440,7 @@ class ToolExecutorTest {
             device.snapshotHook = { screen -> screen.also { device.screenshotResult = null } }
             val result = executor.execute(call("batch", """{"actions":[{"tool":"wait","args":{"ms":0}},{"tool":"tap","args":{"target":"Private panel"}}]}"""), seen)
             assertTrue(result.output, result.output.startsWith("1. wait: OK"))
-            assertTrue(result.output, result.output.contains(ToolExecutor.PROTECTED))
+            assertTrue(result.output, result.output.contains("get_screen"))
             assertFalse(result.output.contains("Private panel"))
             assertTrue(device.calls.none { it.startsWith("tap(") })
         }

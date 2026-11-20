@@ -90,7 +90,8 @@ class ScreenSafetyTest {
     }
 
     @Test fun voiceDuringTheCaptureCheckStopsThePendingAction() = runTest {
-        val inner = FakeDeviceController(listOf(screen))
+        val changed = screen.copy(roots = screen.roots + button("C", 300))
+        val inner = FakeDeviceController(listOf(screen, changed))
         val device = object : DeviceController by inner {
             var sessions = 0
             override fun interruptions() = sessions

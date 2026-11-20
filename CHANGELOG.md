@@ -4,7 +4,7 @@ All notable changes to OpenPhoneUse are listed here, newest first. The format fo
 
 ## [Unreleased]
 
-- When Android reports a failed display capture check, the agent withholds the screen text and image and stops actions aimed at that screen. This also applies in text-only mode and during a batch.
+- When Android reports a failed display capture check, the agent withholds the screen and stops actions aimed at it, including in text-only mode and during a batch. A temporary failure prompts a fresh screen read. A failed retry on the same app produces a protection notice.
 
 ## [0.0.7] - 2026-11-15
 
