@@ -543,7 +543,6 @@ private fun AppRoot(
     val routineList by remember { com.phoneuse.routine.RoutineSystem.get(context).store.routines }.collectAsState()
 
     val draftState = rememberConversationDraft(current)
-    var draft by draftState::value
     // A home-screen widget's prompt: started like text from the composer (typed) or a card button (chips, tiles),
     // so every confirmation still applies. While a run is going it waits in the composer instead.
     LaunchedEffect(promptRequest) {
@@ -811,16 +810,8 @@ private fun AppRoot(
                         onAction = onResultAction,
                         runningHere = runningHere,
                         liveSteps = liveSteps,
-                        conversationId = current,
-                        draft = draft,
-                        onInput = { draft = it },
-                        onAppendSpeech = { draft = draft.appendSpeech(it) },
-                        onSend = {
-                            if (vm.send(draft.text)) {
-                                draft = TextFieldValue("")
-                            } else {
-                                Toast.makeText(context, tr("You can do that when the current task finishes", "지금 작업이 끝나면 할 수 있어요"), Toast.LENGTH_SHORT).show()
-                            }
+                        onVoice = { spoken ->
+                            if (!vm.send(spoken)) Toast.makeText(context, tr("You can speak when the task in the other chat finishes", "다른 대화의 작업이 끝나면 말할 수 있어요"), Toast.LENGTH_SHORT).show()
                         },
                         onStop = { vm.stop() },
                         modifier = Modifier.fillMaxSize().windowInsetsPadding(topInsets),

@@ -75,15 +75,19 @@ class VoiceRecognizer(
     fun stop() {
         if (!_state.value.listening) return
         emit(VoiceEvent.EndOfSpeech)
+        awaitFinal()
         runCatching { recognizer?.stopListening() }
-        awaitFinal(if (_state.value.partial.isBlank()) RESULT_TIMEOUT_MS else FINAL_WAIT_MS)
     }
 
     /** Some engines never return a final. Recover their last words if they stop responding. */
-    private fun awaitFinal(timeoutMs: Long) {
+    private fun awaitFinal() {
         val id = session
         main.removeCallbacksAndMessages(null)
-        main.postDelayed({ if (id == session && _state.value.phase == VoicePhase.PROCESSING) finish(emptyList()) }, timeoutMs)
+        main.postDelayed({
+            if (id == session && _state.value.phase == VoicePhase.PROCESSING) {
+                finish(emptyList(), timedOut = true)
+            }
+        }, FINAL_WAIT_MS)
     }
 
     /** Cancel: drop what was heard. */
@@ -114,13 +118,17 @@ class VoiceRecognizer(
 
     fun destroy() {
         interrupt()
+        releaseRecognizer()
+    }
+
+    private fun releaseRecognizer() {
         recognizer?.let { runCatching { it.destroy() } }
         recognizer = null
     }
 
     private fun recognizerFor(engine: VoiceEngine): SpeechRecognizer? {
         recognizer?.let { if (recognizerEngine == engine) return it }
-        recognizer?.let { runCatching { it.destroy() } }
+        releaseRecognizer()
         recognizer = try {
             when (engine) {
                 is VoiceEngine.Service -> SpeechRecognizer.createSpeechRecognizer(context, ComponentName(engine.packageName, engine.className))
@@ -135,10 +143,12 @@ class VoiceRecognizer(
         return recognizer
     }
 
-    private fun finish(results: List<String>) {
+    private fun finish(results: List<String>, timedOut: Boolean = false) {
         val text = finalText(_state.value, results)
         session++
         main.removeCallbacksAndMessages(null)
+        // A provider that never sent a terminal callback may still own the mic. Give a retry a new listener and service session.
+        if (timedOut) releaseRecognizer()
         if (text == null) {
             emit(VoiceEvent.Failed(VoiceError.NO_MATCH))
         } else {
@@ -178,9 +188,8 @@ class VoiceRecognizer(
         override fun onBufferReceived(buffer: ByteArray?) = Unit
         override fun onEndOfSpeech() = current {
             if (_state.value.listening) {
-                // A natural pause can precede a slow network final. The short fallback is for a tap on Done.
                 emit(VoiceEvent.EndOfSpeech)
-                awaitFinal(RESULT_TIMEOUT_MS)
+                awaitFinal()
             }
         }
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
@@ -215,9 +224,8 @@ class VoiceRecognizer(
         private const val TAG = "VoiceRecognizer"
         private const val AUDIO_REPORT_INTERVAL_MS = 10_000L
 
-        /** How long a manual stop waits for the final text before using the partial. */
+        /** How long to wait after speech ends before using the latest partial. */
         const val FINAL_WAIT_MS = 4_000L
-        private const val RESULT_TIMEOUT_MS = 30_000L
 
         fun detectEngine(context: Context): VoiceEngine {
             val services = runCatching {

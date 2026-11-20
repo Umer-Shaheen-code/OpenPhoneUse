@@ -15,7 +15,6 @@ import android.view.WindowManager
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
@@ -25,9 +24,7 @@ import com.phoneuse.assist.AssistVoiceActivity
 import com.phoneuse.assist.VoiceBridge
 import com.phoneuse.service.OverlayHooks
 import com.phoneuse.service.PhoneUseAccessibilityService
-import com.phoneuse.ui.chat.ConversationDrafts
-import com.phoneuse.ui.chat.ConversationDraft
-import com.phoneuse.ui.chat.appendSpeech
+import com.phoneuse.ui.chat.PanelDraft
 import com.phoneuse.ui.theme.PhoneUseTheme
 import com.phoneuse.ui.theme.isDark
 import kotlinx.coroutines.Dispatchers
@@ -84,6 +81,7 @@ class OverlayManager(private val service: AccessibilityService) : OverlayHooks, 
     private var voiceRequest: Int? = null
     private val listening: Boolean get() = voiceRequest != null
     private var closing = false
+    private var panelDraft: PanelDraft? = null
 
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) = Unit
@@ -140,8 +138,8 @@ class OverlayManager(private val service: AccessibilityService) : OverlayHooks, 
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
             title = "PhoneUse dock"
         }
-        // The standalone debug overlay has no conversation.
-        val draft = conversationId?.let { ConversationDrafts.state(it) } ?: ConversationDraft(TextFieldValue())
+        val draft = PanelDraft(conversationId)
+        panelDraft = draft
         val dockView = composeView {
             val s by state.collectAsState()
             val clears by focusClears.collectAsState()
@@ -152,12 +150,13 @@ class OverlayManager(private val service: AccessibilityService) : OverlayHooks, 
                 focusClears = clears,
                 onStop = { onStop() },
                 onSubmit = { card ->
-                    shown && !closing && card == state.value.card &&
-                        submitDockText(card, draft.value.text, onCardResult, onSteer)
+                    shown && !closing && card == state.value.card && draft.submit { text ->
+                        submitDockText(card, text, onCardResult, onSteer)
+                    }
                 },
                 onCardResult = { id, result -> onCardResult(id, result) },
                 onInputFocus = { setInputFocusable(it) },
-                onVoice = { startVoice { draft.value = draft.value.appendSpeech(it) } },
+                onVoice = { startVoice(draft::appendSpeech) },
             )
         }
         wm.addView(dockView, dp)
@@ -182,6 +181,8 @@ class OverlayManager(private val service: AccessibilityService) : OverlayHooks, 
         inputFocusable = false
         voiceRequest?.let(VoiceBridge::interrupt)
         voiceRequest = null
+        panelDraft?.close()
+        panelDraft = null
         owner.pause()
     }
 

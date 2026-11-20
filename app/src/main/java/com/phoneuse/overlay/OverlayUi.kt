@@ -60,6 +60,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -161,6 +163,7 @@ fun DockContent(
     onVoice: () -> Unit = {},
 ) {
     var wantKeyboard by remember { mutableStateOf(false) }
+    var sendRefused by remember(draft.text) { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
 
@@ -187,8 +190,12 @@ fun DockContent(
 
     // Text typed while a question card is open answers that card (with its id); otherwise it steers.
     fun send() {
-        if (!onSubmit(state.card)) return
-        onDraftChange(TextFieldValue())
+        if (draft.text.isBlank()) return
+        if (!onSubmit(state.card)) {
+            sendRefused = true
+            return
+        }
+        sendRefused = false
         focusManager.clearFocus()
     }
 
@@ -251,6 +258,13 @@ fun DockContent(
             } else {
                 CardBody(card) { result -> onCardResult(card.id, result) }
                 input(if (card is DockCard.Ask) tr("You can type another answer", "다른 답을 써도 돼요") else tr("Tell me if you want it different", "다르게 하려면 말해 주세요"), true)
+            }
+            if (sendRefused) {
+                Text(
+                    tr("Still here. Send again when the task finishes", "입력창에 남아 있어요. 작업이 끝나면 다시 보내 주세요"),
+                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    fontSize = 13.sp, color = c.textSub,
+                )
             }
         }
     }

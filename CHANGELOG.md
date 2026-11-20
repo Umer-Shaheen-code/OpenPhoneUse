@@ -4,7 +4,7 @@ All notable changes to OpenPhoneUse are listed here, newest first. The format fo
 
 ## [Unreleased]
 
-- Dictated follow-ups stay in the conversation draft until you press Send. If a task ends while you are dictating from the floating panel, the chat keeps the words already recognized.
+- Dictation in the floating panel fills its input so you can edit a follow-up before pressing Send. When the task ends, the chat keeps any unsent words from the panel.
 - Photos and files finish importing into the conversation where you attached them, even if you switch chats.
 
 ## [0.0.7] - 2026-11-15

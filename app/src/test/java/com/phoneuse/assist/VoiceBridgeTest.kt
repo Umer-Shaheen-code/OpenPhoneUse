@@ -147,13 +147,13 @@ class VoiceBridgeTest {
         assertEquals(listOf("complete instruction"), got)
     }
 
-    @Test fun systemSpeechDialogMayReturnOnlyAFinalResultAfterTheNativeTimeout() = runTest {
+    @Test fun anExternalDialogCanReturnAFinalBeforeItsDeadline() = runTest {
         val got = ArrayList<String?>()
         val id = VoiceBridge.request { got += it }
         val waiting = async { VoiceBridge.awaitIdle() }
         advanceTimeBy(1_000)
         VoiceBridge.setExternalUi(id, true)
-        advanceTimeBy(2 * VoiceBridge.MAX_WAIT_MS)
+        advanceTimeBy(VoiceBridge.MAX_WAIT_MS - 1)
         assertFalse(waiting.isCompleted)
         VoiceBridge.setExternalUi(id, false)
         VoiceBridge.deliver(id, "complete external transcript")
@@ -161,12 +161,60 @@ class VoiceBridgeTest {
         assertEquals(listOf("complete external transcript"), got)
     }
 
+    @Test fun anAbandonedExternalDialogTimesOutAndItsLateResultIsIgnored() = runTest {
+        val got = mutableListOf<String?>()
+        val id = VoiceBridge.request { got += it }
+        VoiceBridge.setExternalUi(id, true)
+        val waiting = async { VoiceBridge.awaitIdle() }
+        advanceTimeBy(VoiceBridge.MAX_WAIT_MS - 1)
+        assertFalse(waiting.isCompleted)
+        VoiceBridge.update(id, "last words")
+        VoiceBridge.heardAudio(id)
+        advanceTimeBy(VoiceBridge.SETTLE_MS + 2)
+        assertTrue(waiting.isCompleted)
+        assertTrue(waiting.await())
+        VoiceBridge.deliver(id, "stale result")
+        assertEquals(listOf("last words"), got)
+        assertFalse(VoiceBridge.awaitIdle())
+    }
+
+    @Test fun endingARunBoundsTheWaitEvenIfTheMicKeepsReportingActivity() = runTest {
+        val got = mutableListOf<String?>()
+        val id = VoiceBridge.request { got += it }
+        val runJob = Job()
+        val finishing = async { VoiceBridge.finishForRun(id, runJob) }
+        advanceTimeBy(VoiceBridge.MAX_WAIT_MS - 1)
+        VoiceBridge.heardAudio(id)
+        VoiceBridge.update(id, "keep these words")
+        assertFalse(finishing.isCompleted)
+        advanceTimeBy(2)
+        assertTrue(finishing.isCompleted)
+        finishing.await()
+        VoiceBridge.deliver(id, "old final")
+        assertEquals(listOf("keep these words"), got)
+        assertEquals(null, VoiceBridge.activeSession.value)
+        runJob.cancel()
+    }
+
+    @Test fun endingOneRunDoesNotWaitForOrInterruptAReplacementSession() = runTest {
+        val id = VoiceBridge.request { }
+        val runJob = Job()
+        val finishing = async { VoiceBridge.finishForRun(id, runJob) }
+        runCurrent()
+        val next = VoiceBridge.request { }
+        runCurrent()
+        assertTrue(finishing.isCompleted)
+        finishing.await()
+        assertEquals(next, VoiceBridge.activeSession.value)
+        runJob.cancel()
+    }
+
     @Test fun cancellingAnExternalRequestReleasesTheWaitAndIgnoresALateResult() = runTest {
         val got = ArrayList<String?>()
         val id = VoiceBridge.request { got += it }
         VoiceBridge.setExternalUi(id, true)
         val waiting = async { VoiceBridge.awaitIdle() }
-        advanceTimeBy(2 * VoiceBridge.MAX_WAIT_MS)
+        advanceTimeBy(1_000)
         assertFalse(waiting.isCompleted)
         VoiceBridge.deliver(id, null)
         assertTrue(waiting.await())
@@ -180,7 +228,7 @@ class VoiceBridgeTest {
         val id = VoiceBridge.request { got += it }
         VoiceBridge.setExternalUi(id, true)
         val waiting = async { VoiceBridge.awaitIdle() }
-        advanceTimeBy(2 * VoiceBridge.MAX_WAIT_MS)
+        advanceTimeBy(1_000)
         VoiceBridge.setExternalUi(id, false)
         advanceTimeBy(50_000)
         VoiceBridge.heardAudio(id)

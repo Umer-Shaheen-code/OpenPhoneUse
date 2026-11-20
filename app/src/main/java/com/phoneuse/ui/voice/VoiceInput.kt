@@ -101,7 +101,7 @@ fun rememberVoiceInput(
     onInterrupted: (String) -> Unit = {},
     onExternalUi: (Boolean) -> Unit = {},
     onAudioActivity: () -> Unit = {},
-    enabled: Boolean = true,
+    canStart: () -> Boolean = { true },
 ): VoiceInput {
     val context = LocalContext.current
     val view = LocalView.current
@@ -111,6 +111,7 @@ fun rememberVoiceInput(
     val latestInterrupted by rememberUpdatedState(onInterrupted)
     val latestExternalUi by rememberUpdatedState(onExternalUi)
     val latestAudioActivity by rememberUpdatedState(onAudioActivity)
+    val latestCanStart by rememberUpdatedState(canStart)
     val recognizer = remember(context) {
         VoiceRecognizer(
             context,
@@ -147,6 +148,8 @@ fun rememberVoiceInput(
         pending[0] = scope.launch {
             val language = speechLanguageTag(AppGraph.voiceLanguageNow(), Locale.getDefault())
             pending[0] = null
+            // A permission dialog or language read can outlive its input or its dock session.
+            if (!latestCanStart()) return@launch
             if (recognizer.engine == VoiceEngine.Dialog) {
                 try {
                     latestExternalUi(true)
@@ -163,7 +166,7 @@ fun rememberVoiceInput(
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         latestExternalUi(false)
         // A confirmation can hide the mic while Android is showing the permission prompt.
-        if (enabled) {
+        if (latestCanStart()) {
             if (granted) listen() else recognizer.fail(VoiceError.PERMISSION)
         }
     }
@@ -204,7 +207,7 @@ fun rememberVoiceInput(
 /** Chat dictation commits one segment on completion or when the input goes offscreen. */
 @Composable
 fun rememberDraftVoiceInput(onAppendSpeech: (String) -> Unit, enabled: Boolean = true): VoiceInput {
-    val voice = rememberVoiceInput(onText = onAppendSpeech, onInterrupted = onAppendSpeech, enabled = enabled)
+    val voice = rememberVoiceInput(onText = onAppendSpeech, onInterrupted = onAppendSpeech, canStart = { enabled })
     val lifecycle = (LocalActivity.current as? LifecycleOwner)?.lifecycle
     DisposableEffect(voice, lifecycle) {
         // Preserve recognised words before the activity saves its draft, including on rotation.

@@ -50,7 +50,7 @@ object VoiceBridge {
         val request = current ?: return
         if (request.id == id && partial.isNotBlank() && partial != request.partial) {
             request.partial = partial
-            revision.value++
+            if (!request.externalUi) revision.value++
         }
     }
 
@@ -67,7 +67,8 @@ object VoiceBridge {
     /** Some in-app providers report speech activity but do not provide partial text. */
     @Synchronized
     fun heardAudio(id: Int) {
-        if (current?.id == id) revision.value++
+        val request = current ?: return
+        if (request.id == id && !request.externalUi) revision.value++
     }
 
     /** A null result is an explicit cancellation, including when the recognizer already had some words. */
@@ -82,14 +83,17 @@ object VoiceBridge {
         request.onResult(request.partial)
     }
 
-    /** A normal return waits for dictation. Stopping the run keeps the partial and releases the overlay. */
+    /** Give this run's final phrase a bounded wait, even if a recognizer keeps reporting audio. */
     internal suspend fun finishForRun(id: Int, runJob: Job) {
         try {
-            withContext(runJob) { awaitIdle() }
+            withContext(runJob) {
+                withTimeoutOrNull(MAX_WAIT_MS) { activeSession.first { it != id } }
+            }
         } catch (stopped: CancellationException) {
             if (!runJob.isCancelled) throw stopped
-            interrupt(id)
         }
+        // Timeout or Stop preserves the partial. A completed or replaced request is already delivered.
+        interrupt(id)
     }
 
     @Synchronized
@@ -102,7 +106,7 @@ object VoiceBridge {
         return request
     }
 
-    /** Waits out live dictation and external dialogs. A stalled native request returns its last words. */
+    /** Live native speech extends the wait. An abandoned external dialog or silent mic returns its last words. */
     suspend fun awaitIdle(timeoutMs: Long = MAX_WAIT_MS): Boolean {
         if (activeSession.value == null) return false
         while (true) {
@@ -111,10 +115,6 @@ object VoiceBridge {
             if (id == null) {
                 delay(SETTLE_MS)
                 if (revision.value == seen) return true
-                continue
-            }
-            if (synchronized(this) { current?.externalUi == true }) {
-                revision.first { it != seen }
                 continue
             }
             val changed = withTimeoutOrNull(timeoutMs) {

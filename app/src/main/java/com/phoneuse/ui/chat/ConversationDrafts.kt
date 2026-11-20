@@ -27,13 +27,13 @@ internal class ConversationDraft(initial: TextFieldValue) {
             val after = target.value
             target.value = if (after.text.isEmpty()) before else before.appendText(after.text)
         }
-        // Both the old composer and an already visible dock may still have callbacks holding their draft.
+        // A composer or panel opened before the ID changed can still hold the old draft.
         joined = target
         local = TextFieldValue()
     }
 }
 
-/** The action dock and the chat edit the same draft on the main thread, even across activity launches. */
+/** Chat composers and returning panels look up their conversation's draft on the main thread. */
 internal object ConversationDrafts {
     private val drafts = mutableMapOf<Long?, ConversationDraft>()
 
@@ -47,12 +47,6 @@ internal object ConversationDrafts {
         if (target == null) drafts[to] = old else old.join(target)
     }
 
-    fun append(id: Long, speech: String) {
-        if (speech.isBlank()) return
-        val draft = state(id)
-        draft.value = draft.value.appendSpeech(speech)
-    }
-
     fun forget(ids: Collection<Long>) {
         for (id in ids) drafts.remove(id)?.value = TextFieldValue()
     }
@@ -60,6 +54,36 @@ internal object ConversationDrafts {
     fun clear() {
         forget(drafts.keys.filterNotNull())
         drafts[null]?.value = TextFieldValue()
+    }
+}
+
+/** The floating panel starts empty on every run. Only words left unsent are handed back to its chat. */
+internal class PanelDraft(conversationId: Long?) {
+    private val chat = conversationId?.let { ConversationDrafts.state(it) }
+    private var closed = false
+    var value by mutableStateOf(TextFieldValue())
+
+    fun appendSpeech(words: String) {
+        if (closed) {
+            // The speech result may have been posted to the main thread just before the panel closed.
+            if (chat != null) chat.value = chat.value.appendSpeech(words)
+        } else {
+            value = value.appendSpeech(words)
+        }
+    }
+
+    fun submit(send: (String) -> Boolean): Boolean {
+        if (closed || value.text.isBlank() || !send(value.text)) return false
+        value = TextFieldValue()
+        return true
+    }
+
+    fun close() {
+        if (closed) return
+        closed = true
+        if (chat != null && value.text.isNotBlank()) {
+            chat.value = if (chat.value.text.isEmpty()) value else chat.value.appendText(value.text)
+        }
     }
 }
 

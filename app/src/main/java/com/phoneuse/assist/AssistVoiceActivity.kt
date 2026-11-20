@@ -12,8 +12,6 @@ import androidx.compose.runtime.getValue
 import com.phoneuse.app.AppGraph
 import com.phoneuse.app.FontSize
 import com.phoneuse.app.ThemeMode
-import com.phoneuse.ui.MainActivity
-import com.phoneuse.ui.chat.ConversationDrafts
 import com.phoneuse.ui.theme.PhoneUseTheme
 import com.phoneuse.ui.theme.isDark
 import com.phoneuse.ui.voice.VoiceSheet
@@ -22,7 +20,7 @@ import com.phoneuse.ui.voice.rememberVoiceInput
 /**
  * Voice input for windows that cannot host it themselves: the assistant sheet's 🎤 (the sheet hides and starts
  * this) and the overlay dock's 🎤. Shows a compact in-app listening sheet (the same waveform as the chat
- * composer). A follow-up returns to its conversation draft. A dock session returns to [VoiceBridge].
+ * composer). The assistant sends recognized text to its conversation. A dock session returns it to [VoiceBridge].
  */
 class AssistVoiceActivity : ComponentActivity() {
     /** Set once the session has an outcome, so it is delivered once. */
@@ -43,24 +41,24 @@ class AssistVoiceActivity : ComponentActivity() {
             return
         }
         // An in-process recognizer cannot resume across recreation. Recover its last words once.
-        if (!externalUi && !partial.isNullOrBlank()) {
-            interrupt(showDraft = true)
+        if (id != null && !externalUi && !partial.isNullOrBlank()) {
+            interrupt()
             finish()
             return
         }
-        val autoStart = !externalUi
+        val autoStart = if (id == null) savedInstanceState == null else !externalUi
         setContent {
             val mode by AppGraph.themeMode.collectAsState()
             val fontSize by AppGraph.fontSize.collectAsState()
             PhoneUseTheme(isDark(mode ?: ThemeMode.SYSTEM), (fontSize ?: FontSize.DEFAULT).scale) {
                 val voice = rememberVoiceInput(
                     onText = ::onText,
-                    onEnd = { interrupt(showDraft = true); finish() },
+                    onEnd = { interrupt(); finish() },
                     onPartial = ::checkpoint,
                     onInterrupted = { heard ->
                         checkpoint(heard)
-                        if (!isChangingConfigurations && !done && (id != null || conversation != null)) {
-                            interrupt(showDraft = true)
+                        if (!isChangingConfigurations && !done && id != null) {
+                            interrupt()
                             finish()
                         }
                     },
@@ -69,6 +67,7 @@ class AssistVoiceActivity : ComponentActivity() {
                         if (id != null) VoiceBridge.setExternalUi(id, visible)
                     },
                     onAudioActivity = { if (id != null) VoiceBridge.heardAudio(id) },
+                    canStart = { !done && (id == null || VoiceBridge.activeSession.value == id) },
                 )
                 val dismiss = {
                     // Explicit cancellation discards even a partial the recognizer already delivered.
@@ -92,17 +91,11 @@ class AssistVoiceActivity : ComponentActivity() {
         if (done) return
         done = true
         val id = bridgeId
-        val target = conversation
         finish()
         if (id != null) {
             VoiceBridge.deliver(id, text)
         } else if (!text.isNullOrBlank()) {
-            if (target != null) {
-                ConversationDrafts.append(target, text)
-                MainActivity.open(this, target)
-                return
-            }
-            val result = AssistSession.sender.submit(text, null) {}
+            val result = AssistSession.sender.submit(text, conversation) {}
             // No sheet to keep open here: say why and keep the words visible.
             if (result is SubmitResult.Blocked) {
                 Toast.makeText(applicationContext, "${result.reason}: $text", Toast.LENGTH_LONG).show()
@@ -111,23 +104,16 @@ class AssistVoiceActivity : ComponentActivity() {
     }
 
     private fun checkpoint(text: String) {
+        val id = bridgeId ?: return
         if (done || text.isBlank()) return
         partial = text
-        bridgeId?.let { VoiceBridge.update(it, text) }
+        VoiceBridge.update(id, text)
     }
 
-    private fun interrupt(showDraft: Boolean = false) {
+    private fun interrupt() {
         if (done) return
         done = true
-        val id = bridgeId
-        if (id != null) {
-            VoiceBridge.interrupt(id)
-            return
-        }
-        val target = conversation ?: return
-        val words = partial ?: return
-        ConversationDrafts.append(target, words)
-        if (showDraft) MainActivity.open(this, target)
+        bridgeId?.let(VoiceBridge::interrupt)
     }
 
     /** Home pressed while listening: the microphone must not stay open behind the launcher. */
