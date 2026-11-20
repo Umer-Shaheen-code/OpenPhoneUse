@@ -65,8 +65,9 @@ app: com.coupang.mobile | screen 1080x2400 | list continues below (more-below): 
 `AgentLoop` adds it to the input (`addImage`). Each element you can act on is outlined and tagged with its list
 number. `agent/MarkLayout` places the tags (pure geometry, tested on the JVM; at most 120 tags per image) and
 `service/MarkPainter` draws them, so the model reads layouts, icons, charts and games from the picture and still acts
-by number. There is no screenshot when the setting that sends text only is on, or on a protected screen where the
-capture is blocked; the text list is always sent. `screenshot` remains a tool for a fresh look.
+by number. The capture check uses Android's result for the whole display. If the check fails, the screen description
+contains only the app name and a protection notice. Text-only mode checks capture before sending the element list.
+`screenshot` remains a tool for a fresh look.
 
 ## Speed
 
