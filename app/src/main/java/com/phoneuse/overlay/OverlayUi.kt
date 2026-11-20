@@ -156,8 +156,21 @@ fun DockContent(
     onCardResult: (id: Long, result: String) -> Unit,
     onInputFocus: (Boolean) -> Unit,
     onVoice: () -> Unit = {},
+    onMoveHandoff: () -> Unit = {},
 ) {
+    // A manual handoff temporarily removes the steering field, but keeps its draft.
     var text by remember { mutableStateOf("") }
+    val card = state.card
+    if (card is DockCard.HandOff) {
+        HandoffBar(
+            card = card,
+            onMove = onMoveHandoff,
+            onDone = { onCardResult(card.id, OverlayUserGate.HAND_OFF_DONE) },
+            onStop = onStop,
+        )
+        return
+    }
+
     var wantKeyboard by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -191,7 +204,6 @@ fun DockContent(
     }
 
     val c = pu
-    val card = state.card
     val border = when (card) {
         is DockCard.Confirm -> card.category.look(c).border
         null -> if (c.dark) c.line else Color(0xFFF6DCD1)
@@ -406,15 +418,6 @@ private fun ColumnScope.CardBody(card: DockCard, onResult: (String) -> Unit) {
             CardHeader(PuIcons.Question, c.accentText, c.accentSoft, null, card.question)
             OptionButtons(card.options, onResult)
         }
-        is DockCard.HandOff -> {
-            CardHeader(PuIcons.Lock, c.secure, c.secureSoft, tr("Please enter it yourself", "직접 입력해 주세요"), card.reason)
-            Text(
-                tr("I've unlocked touch for a moment. Tap Done when you finish and I'll continue.", "잠시 터치 잠금을 풀었어요. 다 하고 완료를 누르면 이어서 할게요."),
-                fontSize = 13.5.sp,
-                lineHeight = 21.sp,
-                color = c.text2,
-            )
-            PuButton(tr("Done, continue", "완료, 이어서 해줘"), { onResult(OverlayUserGate.HAND_OFF_DONE) }, Modifier.fillMaxWidth())
-        }
+        is DockCard.HandOff -> Unit // Uses the compact handoff bar in place of the dock.
     }
 }

@@ -104,6 +104,23 @@ class AccessibilityDeviceController(
     /** The last few reads handed out by [snapshot], newest first: the screens the model was shown. */
     private val shown = ArrayDeque<Read>()
 
+    /** Place the handoff using the last screen we already showed, without reading the app during private input. */
+    internal fun lastShownControls(windowId: Int?, width: Int, height: Int): List<Bounds> {
+        val screen = synchronized(shown) { shown.firstOrNull()?.snap } ?: return emptyList()
+        if (screen.displayWidth != width || screen.displayHeight != height) return emptyList()
+        return buildList {
+            fun visit(node: UiNode) {
+                if (node.visibleToUser && node.enabled && !node.covered &&
+                    (node.clickable || node.longClickable || node.editable || node.checkable || node.password)
+                ) {
+                    add(node.uncovered ?: node.bounds)
+                }
+                node.children.forEach(::visit)
+            }
+            screen.appRoots.firstOrNull { it.windowId == windowId }?.let(::visit)
+        }
+    }
+
     override suspend fun snapshot(): ScreenSnapshot {
         val s = service()
         val kept = settledSample
