@@ -24,6 +24,8 @@ import com.phoneuse.agent.DeviceController
 import com.phoneuse.agent.GlobalAction
 import com.phoneuse.agent.ScreenMark
 import com.phoneuse.agent.ServiceUnavailableException
+import com.phoneuse.overlay.HandoffControls
+import com.phoneuse.overlay.handoffControls
 import com.phoneuse.screen.ScreenSnapshot
 import com.phoneuse.screen.ScreenBusy
 import com.phoneuse.screen.TreeCompressor
@@ -105,20 +107,12 @@ class AccessibilityDeviceController(
     private val shown = ArrayDeque<Read>()
 
     /** Place the handoff using the last screen we already showed, without reading the app during private input. */
-    internal fun lastShownControls(windowId: Int?, width: Int, height: Int): List<Bounds> {
-        val screen = synchronized(shown) { shown.firstOrNull()?.snap } ?: return emptyList()
-        if (screen.displayWidth != width || screen.displayHeight != height) return emptyList()
-        return buildList {
-            fun visit(node: UiNode) {
-                if (node.visibleToUser && node.enabled && !node.covered &&
-                    (node.clickable || node.longClickable || node.editable || node.checkable || node.password)
-                ) {
-                    add(node.uncovered ?: node.bounds)
-                }
-                node.children.forEach(::visit)
-            }
-            screen.appRoots.firstOrNull { it.windowId == windowId }?.let(::visit)
+    internal fun lastShownControls(windowIds: Set<Int>, width: Int, height: Int, keyboardVisible: Boolean): HandoffControls {
+        val screen = synchronized(shown) { shown.firstOrNull()?.snap } ?: return HandoffControls()
+        if (screen.displayWidth != width || screen.displayHeight != height || screen.keyboardVisible != keyboardVisible) {
+            return HandoffControls()
         }
+        return screen.handoffControls(windowIds)
     }
 
     override suspend fun snapshot(): ScreenSnapshot {

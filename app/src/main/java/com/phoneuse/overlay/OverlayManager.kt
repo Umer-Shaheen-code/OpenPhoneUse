@@ -16,7 +16,10 @@ import android.view.accessibility.AccessibilityWindowInfo
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
@@ -36,6 +39,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
+import kotlin.math.roundToInt
 
 /**
  * Three accessibility-overlay windows, bottom to top: touch blocker, border glow, steering dock.
@@ -78,7 +82,8 @@ class OverlayManager(private val service: PhoneUseAccessibilityService) : Overla
     private var handoffId: Long? = null
     private var handoffAtBottom = false
     private var movedFrom: Bounds? = null
-    private var frontAppWindow: Int? = null
+    private var appWindowIds = emptySet<Int>()
+    private var handoffSize by mutableStateOf<IntSize?>(null)
     private var dialogBounds: Bounds? = null
     private var keyboardBounds: Bounds? = null
     private var passDepth = 0
@@ -158,6 +163,7 @@ class OverlayManager(private val service: PhoneUseAccessibilityService) : Overla
                 onMoveHandoff = {
                     if (handoff != null && state.value.card == handoff) moveHandoff()
                 },
+                handoffSize = handoffSize,
             )
         }
         wm.addView(dockView, dp)
@@ -185,7 +191,8 @@ class OverlayManager(private val service: PhoneUseAccessibilityService) : Overla
         dockParams = null
         inputFocusable = false
         handoffId = null
-        frontAppWindow = null
+        appWindowIds = emptySet()
+        handoffSize = null
         dialogBounds = null
         keyboardBounds = null
         // The run is over: a voice request still open must not hold up the next run's device calls.
@@ -371,7 +378,8 @@ class OverlayManager(private val service: PhoneUseAccessibilityService) : Overla
         handoffId = id
         handoffAtBottom = false
         movedFrom = null
-        frontAppWindow = null
+        appWindowIds = emptySet()
+        handoffSize = null
         dialogBounds = null
         keyboardBounds = null
         params.y = 0
@@ -396,11 +404,17 @@ class OverlayManager(private val service: PhoneUseAccessibilityService) : Overla
     internal fun onHandoffWindowsChanged(windows: List<AccessibilityWindowInfo>) {
         if (handoffId == null) return
         val apps = windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
-        val front = apps.firstOrNull()?.id // AccessibilityService.windows is ordered from front to back.
-        val dialog = if (apps.size > 1) apps.first().frame() else null
+        val ids = apps.map { it.id }.toSet()
+        // Side-by-side activities are peers. Only a window over another app window obscures its controls.
+        val dialog = apps.firstOrNull()?.frame()?.takeIf { front -> apps.drop(1).any { it.frame().intersects(front) } }
         val ime = windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }?.frame()
-        if (frontAppWindow == front && dialogBounds == dialog && keyboardBounds == ime) return
-        frontAppWindow = front
+        if (appWindowIds == ids && dialogBounds == dialog && keyboardBounds == ime) return
+        // A dialog or keyboard can replace the controls the user had moved the bar away from.
+        if (ids != appWindowIds || (keyboardBounds == null) != (ime == null)) {
+            movedFrom = null
+            handoffAtBottom = false
+        }
+        appWindowIds = ids
         dialogBounds = dialog
         keyboardBounds = ime
         positionHandoff()
@@ -426,24 +440,29 @@ class OverlayManager(private val service: PhoneUseAccessibilityService) : Overla
         val p = dockParams ?: return
         val metrics = wm.currentWindowMetrics
         val display = metrics.bounds
-        val insets = metrics.windowInsets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+        val insets = metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
         val area = Bounds(
             display.left + insets.left, display.top + insets.top,
             display.right - insets.right, display.bottom - insets.bottom,
         )
         val ime = keyboardBounds
-        // A docked IME always owns this edge, including when the user explicitly moves the bar.
-        val usable = if (ime != null && ime.left <= area.left && ime.right >= area.right && ime.bottom >= area.bottom) {
-            area.copy(bottom = ime.top.coerceIn(area.top, area.bottom))
-        } else area
+        val minHeight = (56 * service.resources.displayMetrics.density).roundToInt() // One row with its padding.
+        if (moveFrom != null) movedFrom = moveFrom
+        val usable = handoffArea(area, ime, minHeight, movedFrom)
+        // Bound the expanded instructions as well. Move needs room to uncover the previous footprint.
+        val height = (usable.bottom - usable.top).coerceAtLeast(0)
+        handoffSize = IntSize(
+            (usable.right - usable.left).coerceAtLeast(0),
+            (height / 2).coerceAtLeast(minHeight).coerceAtMost(height),
+        )
         if (moveFrom != null) {
-            movedFrom = moveFrom
             handoffAtBottom = moveFrom.centerY <= usable.centerY
         }
-        val controls = service.controller.lastShownControls(frontAppWindow, display.width(), display.height())
+        val controls = service.controller.lastShownControls(appWindowIds, display.width(), display.height(), ime != null)
         val dialog = dialogBounds?.takeUnless { it.contains(usable) }
-        val avoid = controls + listOfNotNull(ime, dialog, movedFrom)
-        val y = handoffBarTop(usable, v.width, v.height, avoid, handoffAtBottom) - display.top
+        val avoid = controls.targets + listOfNotNull(dialog, movedFrom)
+        val containers = controls.containers + listOfNotNull(ime?.takeIf { it.intersects(usable) && !it.contains(usable) })
+        val y = handoffBarTop(usable, v.width, v.height, avoid, handoffAtBottom, containers) - display.top
         val x = usable.centerX - display.centerX()
         if (p.x != x || p.y != y) {
             p.x = x

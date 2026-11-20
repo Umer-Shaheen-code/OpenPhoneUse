@@ -66,6 +66,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.phoneuse.ui.chat.CardHeader
@@ -157,6 +158,7 @@ fun DockContent(
     onInputFocus: (Boolean) -> Unit,
     onVoice: () -> Unit = {},
     onMoveHandoff: () -> Unit = {},
+    handoffSize: IntSize? = null,
 ) {
     // A manual handoff temporarily removes the steering field, but keeps its draft.
     var text by remember { mutableStateOf("") }
@@ -164,6 +166,7 @@ fun DockContent(
     if (card is DockCard.HandOff) {
         HandoffBar(
             card = card,
+            availableSize = handoffSize,
             onMove = onMoveHandoff,
             onDone = { onCardResult(card.id, OverlayUserGate.HAND_OFF_DONE) },
             onStop = onStop,
