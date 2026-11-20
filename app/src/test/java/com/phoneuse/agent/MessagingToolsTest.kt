@@ -1,6 +1,7 @@
 package com.phoneuse.agent
 
 import com.phoneuse.cards.PermissionCard
+import com.phoneuse.i18n.Lang
 import com.phoneuse.memory.Confidence
 import com.phoneuse.memory.InMemoryMemoryStore
 import com.phoneuse.model.InputItem
@@ -22,6 +23,12 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import com.phoneuse.understand.NoticeFact
+import com.phoneuse.understand.NoticeJudgment
+import com.phoneuse.understand.NoticeKind
+import com.phoneuse.understand.ParcelInfo
+import com.phoneuse.understand.ParcelStage
+import com.phoneuse.understand.Sender
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -37,6 +44,8 @@ class MessagingToolsTest {
 
     private class Notifications(var enabled: Boolean = true, val rows: MutableList<StoredNotification> = mutableListOf()) : NotificationSource {
         val dismissed = mutableListOf<List<String>>()
+        val judged = HashMap<String, NoticeFact>()
+        override suspend fun facts(keys: Collection<String>): Map<String, NoticeFact> = judged.filterKeys { it in keys }
         var askedHours: Int? = null
         override fun accessEnabled() = enabled
         override suspend fun recent(hours: Int): List<StoredNotification> {
@@ -71,7 +80,17 @@ class MessagingToolsTest {
     )
 
     private val gate = FakeUserGate()
-    private val notifications = Notifications(rows = rows)
+    private fun fact(kind: NoticeKind, sender: Sender, reply: Boolean = false, amount: Long? = null, merchant: String? = null, parcel: ParcelInfo? = null) =
+        NoticeFact(NoticeJudgment(0, kind, amount, amount?.let { "KRW" }, merchant, null, null, null, parcel, sender, reply, "요약"), null, null)
+
+    private val notifications = Notifications(rows = rows).apply {
+        judged["k1"] = fact(NoticeKind.MESSAGE, Sender.PERSON, reply = true)
+        judged["k2"] = fact(NoticeKind.SPEND, Sender.BUSINESS, amount = 12_500, merchant = "스타벅스")
+        judged["k3"] = fact(NoticeKind.PROMO, Sender.BUSINESS)
+        judged["k4"] = fact(NoticeKind.PARCEL, Sender.BUSINESS, parcel = ParcelInfo("CJ대한통운", "123456789012", null, ParcelStage.OUT_FOR_DELIVERY))
+        judged["k5"] = fact(NoticeKind.PROMO, Sender.BUSINESS)
+        judged["k6"] = fact(NoticeKind.SERVICE, Sender.BUSINESS)
+    }
     private val sms = Sms(
         inbox = listOf(
             SmsMessage("15447200", "[Web발신]\n신한카드(1234)승인 홍*동 12,500원(일시불)11/02 12:34 스타벅스강남", at(12, 35), incoming = true),
@@ -113,6 +132,8 @@ class MessagingToolsTest {
 
         val n = run("notifications_recent", "{}")
         assertTrue(n.output, n.output.startsWith("권한 필요: 알림 읽기"))
+        assertTrue(n.output, n.output.endsWith(PermissionNote.text("").substringAfter(".")))
+        assertFalse(n.output.contains("—"))
         val card = n.card as PermissionCard
         assertEquals(PermissionCard.SETTINGS_NOTIFICATION_LISTENER, card.settings)
         assertTrue(card.permissions.isEmpty())
@@ -140,17 +161,19 @@ class MessagingToolsTest {
         val r = run("notifications_recent", """{"hours":6}""")
         assertEquals(6, notifications.askedHours)
         val groups = (Json.parseToJsonElement(r.output).jsonObject["groups"] as JsonArray).map { it.jsonObject }
-        assertEquals(listOf("답장 필요", "돈 나간 것", "오늘 도착", "나머지"), groups.map { it["label"]!!.jsonPrimitive.content })
+        assertEquals(listOf("답장 필요", "돈", "택배", "나머지"), groups.map { it["label"]!!.jsonPrimitive.content })
         val reply = groups[0]["items"]!!.jsonArray.single().jsonObject
         assertEquals("k1", reply["key"]!!.jsonPrimitive.content)
         assertEquals("19:12", reply["at"]!!.jsonPrimitive.content)
         assertEquals("엄마", reply["title"]!!.jsonPrimitive.content)
-        // Payments and parcels carry what the parsers found.
-        val money = groups[1]["items"]!!.jsonArray.single().jsonObject["payment"]!!.jsonObject
-        assertEquals("스타벅스강남", money["merchant"]!!.jsonPrimitive.content)
+        // Payments and parcels carry what the analysis understood.
+        val money = groups[1]["items"]!!.jsonArray.single().jsonObject["judgment"]!!.jsonObject
+        assertEquals("spend", money["kind"]!!.jsonPrimitive.content)
+        assertEquals("스타벅스", money["merchant"]!!.jsonPrimitive.content)
         assertEquals("12500", money["amount"]!!.jsonPrimitive.content)
-        val parcel = groups[2]["items"]!!.jsonArray.single().jsonObject["parcel"]!!.jsonObject
-        assertEquals("123456789012", parcel["tracking"]!!.jsonPrimitive.content)
+        assertEquals("KRW", money["currency"]!!.jsonPrimitive.content)
+        val parcel = groups[2]["items"]!!.jsonArray.single().jsonObject["judgment"]!!.jsonObject
+        assertEquals("parcel", parcel["kind"]!!.jsonPrimitive.content)
         assertEquals(4, Json.parseToJsonElement(r.output).jsonObject["total"]!!.jsonPrimitive.content.toInt())
     }
 
@@ -380,6 +403,21 @@ class MessagingToolsTest {
         assertTrue(none.output, none.output.startsWith("ERROR"))
     }
 
+    @Test fun dismissSummaryIsEnglishUnderEnglish() {
+        val saved = Lang.korean
+        Lang.korean = false
+        try {
+            gate.confirmResult = false
+            for (n in 5..7) notifications.rows += StoredNotification("k$n", "com.some.app", "앱", "제목", "본문", at(7, n))
+            run("dismiss_notifications", """{"keys":["k1","k2","k3","k4","k5","k6","k7"]}""")
+            val summary = gate.confirms.last().second
+            assertTrue(summary, "(+2 more)" in summary)
+            assertFalse(summary, "외 " in summary)
+        } finally {
+            Lang.korean = saved
+        }
+    }
+
     @Test fun dismissTheUserAskedForSkipsTheCardForAFew() {
         gate.confirmResult = false
         // The user's own words ask to clear: a few keys go without a card.
@@ -405,14 +443,14 @@ class MessagingToolsTest {
         assertEquals(RiskCategory.DELETE, gate.confirms.single().first)
     }
 
-    @Test fun smsSearchReturnsNewestWithParsedPayments() {
+    @Test fun smsSearchReturnsNewest() {
         val r = run("sms_search", """{"query":"승인","days":7}""")
         val (since, query, _) = sms.lastQuery!!
         assertEquals("승인", query)
         assertEquals(now.minusDays(7).toInstant().toEpochMilli(), since)
         val hit = (Json.parseToJsonElement(r.output) as JsonArray).single().jsonObject
         assertEquals("15447200", hit["from"]!!.jsonPrimitive.content)
-        assertEquals("스타벅스강남", (hit["payment"] as JsonObject)["merchant"]!!.jsonPrimitive.content)
+        assertFalse("payment" in hit)
         assertFalse("to" in hit)
     }
 

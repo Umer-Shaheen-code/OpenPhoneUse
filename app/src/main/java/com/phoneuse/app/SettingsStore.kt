@@ -164,6 +164,9 @@ class SettingsStore internal constructor(
      */
     val riskJudge: Flow<Boolean> = store.data.map { it[RISK_JUDGE] ?: true }
 
+    /** Settings "알림 내용 분석": notification text goes to the model to sort payments, parcels and replies (on by default). */
+    val understandNotifications: Flow<Boolean> = store.data.map { it[UNDERSTAND_NOTIFICATIONS] ?: true }
+
     val assistAction: Flow<AssistAction> = store.data.map { prefs -> enumOf(prefs[ASSIST_ACTION], AssistAction.SUGGEST) }
     val controlSpeed: Flow<ControlSpeed> = store.data.map { prefs -> enumOf(prefs[CONTROL_SPEED], ControlSpeed.NORMAL) }
 
@@ -180,7 +183,7 @@ class SettingsStore internal constructor(
 
     val fontSize: Flow<FontSize> = store.data.map { prefs -> enumOf(prefs[FONT_SIZE], FontSize.DEFAULT) }
     val unfoldedLayout: Flow<UnfoldedLayout> = store.data.map { prefs -> enumOf(prefs[UNFOLDED], UnfoldedLayout.SIDE_BY_SIDE) }
-    val voiceLanguage: Flow<VoiceLanguage> = store.data.map { prefs -> enumOf(prefs[VOICE_LANG], VoiceLanguage.KOREAN) }
+    val voiceLanguage: Flow<VoiceLanguage> = store.data.map { prefs -> enumOf(prefs[VOICE_LANG], DEFAULT_VOICE_LANGUAGE) }
 
     /** Settings "답 소리 내어 읽기": replies are read aloud when a run ends; off by default. */
     val readAloud: Flow<Boolean> = store.data.map { it[READ_ALOUD] ?: false }
@@ -313,6 +316,17 @@ class SettingsStore internal constructor(
         store.edit { it[HELPER] = v }
     }
 
+    /** Whether the one-time notice about notification analysis was shown. */
+    val understandNoticeShown: Flow<Boolean> = store.data.map { it[UNDERSTAND_NOTICE] ?: false }
+
+    suspend fun markUnderstandNoticeShown() {
+        store.edit { it[UNDERSTAND_NOTICE] = true }
+    }
+
+    suspend fun setUnderstandNotifications(v: Boolean) {
+        store.edit { it[UNDERSTAND_NOTIFICATIONS] = v }
+    }
+
     suspend fun setRiskJudge(v: Boolean) {
         store.edit { it[RISK_JUDGE] = v }
     }
@@ -405,6 +419,8 @@ class SettingsStore internal constructor(
     companion object {
         const val DEFAULT_MODEL = "gpt-6.1-terra"
         const val DEFAULT_FAST_MODE = true
+        /** Dictation follows the device language until the user picks one. */
+        val DEFAULT_VOICE_LANGUAGE: VoiceLanguage = VoiceLanguage.SYSTEM
         /** The lighter preset routines use when "루틴은 가벼운 모델로" is on. */
         const val ROUTINE_LIGHT_MODEL = "gpt-6-luna"
         /** The fast helper's model: quick, with a large quota. */
@@ -449,6 +465,8 @@ class SettingsStore internal constructor(
         private val RETENTION = intPreferencesKey("retention_days")
         private val CONFIRM_SEND = booleanPreferencesKey("confirm_send")
         private val RISK_JUDGE = booleanPreferencesKey("risk_judge")
+        private val UNDERSTAND_NOTIFICATIONS = booleanPreferencesKey("understand_notifications")
+        private val UNDERSTAND_NOTICE = booleanPreferencesKey("understand_notice_shown")
         private val ASSIST_ACTION = stringPreferencesKey("assist_action")
         private val CONTROL_SPEED = stringPreferencesKey("control_speed")
         private val SUMMARY_MINUTE = intPreferencesKey("summary_minute")

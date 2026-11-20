@@ -4,6 +4,8 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import com.phoneuse.chat.ChatDb
+import com.phoneuse.understand.ChatDbSqlPort
+import com.phoneuse.understand.UnderstandingStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +38,12 @@ object NotificationSql {
 
     /** Read columns: [COLUMNS] and removed_at (v6). */
     const val READ_COLUMNS = "$COLUMNS, removed_at"
+
+    /** Args: [count] keys. */
+    fun byKeys(count: Int): String {
+        require(count > 0)
+        return "SELECT $READ_COLUMNS FROM notifications WHERE key IN (${List(count) { "?" }.joinToString(", ")})"
+    }
 
     /** Args: since (epoch ms), limit. Newest first. */
     const val SINCE = "SELECT $READ_COLUMNS FROM notifications WHERE posted_at >= ? ORDER BY posted_at DESC, key LIMIT ?"
@@ -72,25 +80,35 @@ class NotificationStore(private val db: ChatDb, private val clock: () -> Long = 
 
     @Volatile private var lastPrune = 0L
 
+    /** What the model understood of each notification; kept in step with this history. */
+    val understanding: UnderstandingStore by lazy { UnderstandingStore(ChatDbSqlPort(db), clock) }
+
     suspend fun add(n: StoredNotification) = withContext(Dispatchers.IO) {
         val w = db.writable
+        val title = n.title.take(MAX_TITLE)
+        val text = n.text.take(MAX_TEXT)
+        val before = w.rawQuery("SELECT title, text FROM notifications WHERE key = ?", arrayOf(n.key)).use { c ->
+            if (c.moveToFirst()) c.getString(0) to c.getString(1) else null
+        }
         w.insertWithOnConflict(
             "notifications", null,
             ContentValues().apply {
                 put("key", n.key)
                 put("package", n.packageName)
                 put("app_label", n.appLabel.take(MAX_LABEL))
-                put("title", n.title.take(MAX_TITLE))
-                put("text", n.text.take(MAX_TEXT))
+                put("title", title)
+                put("text", text)
                 put("posted_at", n.postedAt)
                 put("is_group", if (n.group) 1 else 0)
             },
             SQLiteDatabase.CONFLICT_REPLACE,
         )
+        understanding.noteArrival(n.key, n.postedAt, changed = before != null && before != (title to text))
         val now = clock()
         if (now - lastPrune > PRUNE_EVERY_MS) {
             lastPrune = now
             w.execSQL(NotificationSql.PRUNE, arrayOf<Any>(cutoff(now)))
+            understanding.prune(now)
         }
         _changes.update { it + 1 }
     }
@@ -106,9 +124,23 @@ class NotificationStore(private val db: ChatDb, private val clock: () -> Long = 
         }
     }
 
+    /** The stored rows of [keys]; keys no longer stored are left out. */
+    suspend fun byKeys(keys: Collection<String>): List<StoredNotification> = withContext(Dispatchers.IO) {
+        keys.distinct().chunked(MAX_ARGS).flatMap { chunk ->
+            db.readable.rawQuery(NotificationSql.byKeys(chunk.size), chunk.toTypedArray()).use { c ->
+                buildList {
+                    while (c.moveToNext()) {
+                        add(StoredNotification(c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getString(4), c.getLong(5), c.getInt(6) != 0, if (c.isNull(7)) null else c.getLong(7)))
+                    }
+                }
+            }
+        }
+    }
+
     suspend fun remove(keys: Collection<String>) = withContext(Dispatchers.IO) {
         if (keys.isEmpty()) return@withContext
         for (chunk in keys.distinct().chunked(MAX_ARGS)) db.writable.execSQL(NotificationSql.deleteKeys(chunk.size), chunk.toTypedArray())
+        understanding.dropOrphans()
         _changes.update { it + 1 }
     }
 
@@ -128,12 +160,14 @@ class NotificationStore(private val db: ChatDb, private val clock: () -> Long = 
      */
     suspend fun prune() = withContext(Dispatchers.IO) {
         db.writable.execSQL(NotificationSql.PRUNE, arrayOf<Any>(cutoff(clock())))
+        understanding.prune(clock())
         _changes.update { it + 1 }
     }
 
     /** Deletes the whole history. */
     suspend fun clear() = withContext(Dispatchers.IO) {
         db.writable.execSQL(NotificationSql.CLEAR)
+        understanding.clear()
         _changes.update { it + 1 }
     }
 

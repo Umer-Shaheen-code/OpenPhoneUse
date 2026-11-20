@@ -60,7 +60,7 @@ internal class RoutineModule(private val access: RoutineAccess?) : ToolModule {
                     raw + ("trigger" to JsonObject(trigger + mapOf("lat" to JsonPrimitive(found.lat), "lng" to JsonPrimitive(found.lng)))),
                 )
             } else {
-                placeFrom = tr("Set by you", "직접 지정")
+                placeFrom = PlaceResolver.FROM_USER
             }
         }
         val sentence = args.text("sentence")?.trim()?.takeIf { it.isNotEmpty() }
@@ -76,10 +76,13 @@ internal class RoutineModule(private val access: RoutineAccess?) : ToolModule {
         }
         val card = RoutineCard(RoutineJson.encode(parsed, forModel = true), placeFrom, placeAddress, permission)
         val steps = RoutineText.steps(parsed.action).joinToString(", ") { it.text }
-        val need = permission?.let { " 이 루틴이 울리려면 ${it.label} 권한도 필요해요(카드 아래 [권한 허용])." }.orEmpty()
+        val need = permission?.let { tr(" This routine also needs the ${it.label} permission to fire (the [Allow permission] button under the card).", " 이 루틴이 울리려면 ${it.label} 권한도 필요해요(카드 아래 [권한 허용]).") }.orEmpty()
         return ToolResult(
-            "OK: 미리보기 카드를 띄웠어요 (${RoutineText.whenText(parsed.trigger)} → $steps). 아직 저장 안 됐어요: 사용자가 카드의 " +
-                "[루틴 저장]을 눌러야 저장돼요.$need 짧게 안내하고 finish 하세요.",
+            tr(
+                "OK: a preview card is showing (${RoutineText.whenText(parsed.trigger)} -> $steps). Not saved yet: the user must tap [Save routine] on the card.$need Tell them briefly, then call finish.",
+                "OK: 미리보기 카드를 띄웠어요 (${RoutineText.whenText(parsed.trigger)} → $steps). 아직 저장 안 됐어요: 사용자가 카드의 " +
+                    "[루틴 저장]을 눌러야 저장돼요.$need 짧게 안내하고 finish 하세요.",
+            ),
             null, null, null,
             card = card,
         )
@@ -102,7 +105,7 @@ internal class RoutineModule(private val access: RoutineAccess?) : ToolModule {
             ToolSpec(
                 "make_routine",
                 "Make a routine (automation) from what the user said, e.g. \"회사 도착하면 무음으로\", \"매일 7시 반에 브리핑\". " +
-                    "Shows a preview card; nothing is saved until the user taps [루틴 저장]. " +
+                    "Shows a preview card; nothing is saved until the user taps the card's save button. " +
                     "routine: {title, trigger, conditions?, action}. trigger is one of " +
                     "{type:\"time\", hour, minute, days?:[\"mon\"..\"sun\"]} | " +
                     "{type:\"place\", name, lat?, lng?, radius_m?(>=150, default 200), on:\"enter\"|\"exit\"} (lat/lng may be left out: " +
@@ -111,7 +114,7 @@ internal class RoutineModule(private val access: RoutineAccess?) : ToolModule {
                     "{type:\"device\", kind:\"charger\"|\"bluetooth\"|\"headset\"|\"wifi\", detail?(device or Wi-Fi name)} | " +
                     "{type:\"before_event\", minutes} (before calendar events that have a location). " +
                     "conditions: {days?, time_from?, time_to?(HH:mm), only_when_unlocked?, cooldown_min?(default 60; 1440 = once a day)}. " +
-                    "action: {type:\"ask\", prompt (what the agent should do each time, in Korean), needs_device (true if it must operate apps), " +
+                    "action: {type:\"ask\", prompt (what the agent should do each time, ${AgentPrompt.IN_USER_LANGUAGE}), needs_device (true if it must operate apps), " +
                     "steps?:[{text, device}]} | {type:\"notify\", text} (just a notification) | {type:\"open_app\", package, name?}.",
                 schema(
                     required = listOf("routine"),

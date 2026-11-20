@@ -3,11 +3,14 @@ package com.phoneuse.proactive
 import com.phoneuse.i18n.Lang
 import com.phoneuse.i18n.tr
 import com.phoneuse.memory.MemoryKind
-import com.phoneuse.phone.DigestBucket
-import com.phoneuse.phone.DigestClassifier
 import com.phoneuse.phone.StoredNotification
 import com.phoneuse.routine.UpcomingEvent
-import com.phoneuse.today.TodaySummary
+import com.phoneuse.understand.DigestGroups
+import com.phoneuse.understand.Money
+import com.phoneuse.understand.ParcelRecord
+import com.phoneuse.understand.ParcelStage
+import com.phoneuse.understand.PaymentRecord
+import com.phoneuse.understand.UnderstoodData
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -160,9 +163,9 @@ object ProactiveEngine {
         val nowMs = ms(now)
         val todayEvents = s.events.filter { !it.allDay && local(it.startsAt, now.zone).toLocalDate() == day && it.startsAt >= nowMs }
             .sortedBy { it.startsAt }
-        val parcels = s.parcels.count { (it.status == "배송 출발" || it.status == "도착") && nowMs - it.at < 18 * HOUR_MS }
+        val parcels = UnderstoodData.parcelsToday(s.parcels, now).size
         val overnightFrom = ms(day.minusDays(1).atTime(settings.quietStart), now.zone)
-        val replies = s.notifications.count { it.postedAt >= overnightFrom && needsReply(it) }
+        val replies = s.notifications.count { it.postedAt >= overnightFrom && s.needsReply(it) }
         val body = BriefingText.body(todayEvents, parcels, replies, now.zone)
         val actions = buildList {
             add(NudgeAction.prompt(tr("Today at a glance", "오늘 한눈에"), BriefingText.TODAY_PROMPT))
@@ -199,7 +202,7 @@ object ProactiveEngine {
 
     private fun reply(now: ZonedDateTime, s: NudgeSources): List<Nudge> {
         val nowMs = ms(now)
-        return s.notifications.filter { needsReply(it) && nowMs - it.postedAt < DAY_MS }.map { n ->
+        return s.notifications.filter { s.needsReply(it) && nowMs - it.postedAt < DAY_MS }.map { n ->
             val who = n.title.trim().ifBlank { n.appLabel }.take(20)
             val at = hm(n.postedAt, now.zone)
             Nudge(
@@ -255,29 +258,36 @@ object ProactiveEngine {
     private fun delivery(now: ZonedDateTime, s: NudgeSources): List<Nudge> = buildList {
         val nowMs = ms(now)
         for (p in s.parcels) {
-            if (p.status != "배송 출발" && p.status != "도착") continue
+            if (p.stage != ParcelStage.OUT_FOR_DELIVERY && p.stage != ParcelStage.DELIVERED && p.stage != ParcelStage.PICKUP_READY) continue
             if (nowMs - p.at > 12 * HOUR_MS) continue
-            val arrived = p.status == "도착"
+            val title = when (p.stage) {
+                ParcelStage.DELIVERED -> tr("Your parcel has arrived", "택배가 도착했어요")
+                ParcelStage.PICKUP_READY -> tr("Your parcel is ready for pickup", "택배를 찾아가세요")
+                else -> tr("Your parcel arrives today", "택배가 오늘 와요")
+            }
             add(
                 Nudge(
                     NudgeKind.DELIVERY,
-                    if (arrived) tr("Your parcel has arrived", "택배가 도착했어요") else tr("Your parcel arrives today", "택배가 오늘 와요"),
-                    "${p.carrier} · ${TodaySummary.stageLabel(p.status)}",
-                    if (arrived) emptyList() else listOf(NudgeAction.prompt(tr("Where is it?", "어디쯤 왔어?"), PARCEL_PROMPT)),
-                    p.at, p.at + 12 * HOUR_MS, "parcel:${p.tracking ?: p.key}:${p.status}",
+                    title,
+                    "${parcelName(p)} · ${p.stage.label()}",
+                    if (p.stage == ParcelStage.DELIVERED) emptyList() else listOf(NudgeAction.prompt(tr("Where is it?", "어디쯤 왔어?"), PARCEL_PROMPT)),
+                    p.at, p.at + 12 * HOUR_MS, "parcel:${p.id}:${p.stage.wire}",
                 ),
             )
         }
         val day = now.toLocalDate()
-        val today = s.payments.filter { local(it.at, now.zone).toLocalDate() == day }
+        val todayAll = s.payments.filter { local(it.at, now.zone).toLocalDate() == day }
+        val currency = mainCurrency(todayAll)
+        val today = todayAll.filter { it.currency == currency }
         if (today.isNotEmpty()) {
             val at = ms(day.atTime(SPENDING_AT), now.zone)
-            val top = today.groupBy { it.merchant }.mapValues { (_, v) -> v.sumOf { it.amount } }.entries
-                .sortedByDescending { it.value }.take(3).joinToString(", ") { "${it.key.take(16)} ${won(it.value)}" }
+            val top = today.groupBy { it.merchant ?: tr("Unknown", "알 수 없음") }.mapValues { (_, v) -> v.sumOf { it.amountMinor } }.entries
+                .sortedByDescending { it.value }.take(3).joinToString(", ") { "${it.key.take(16)} ${Money.format(it.value, currency)}" }
+            val total = Money.format(today.sumOf { it.amountMinor }, currency)
             add(
                 Nudge(
                     NudgeKind.DELIVERY,
-                    tr("${today.size} ${if (today.size == 1) "payment" else "payments"} today · ${won(today.sumOf { it.amount })}", "오늘 결제 ${today.size}건 · ${won(today.sumOf { it.amount })}"),
+                    tr("${today.size} ${if (today.size == 1) "payment" else "payments"} today · $total", "오늘 결제 ${today.size}건 · $total"),
                     top,
                     listOf(NudgeAction.prompt(tr("See details", "내역 보기"), tr("Summarize today's payments", "오늘 결제 내역 정리해줘"))),
                     at, endOf(day, now.zone), "spending:$day",
@@ -289,15 +299,18 @@ object ProactiveEngine {
     private fun unusualPayment(now: ZonedDateTime, s: NudgeSources): List<Nudge> {
         val nowMs = ms(now)
         return s.payments.filter { nowMs - it.at in 0 until 12 * HOUR_MS }.mapNotNull { p ->
-            val usual = s.payments.filter { it.merchant == p.merchant && it.at < p.at && p.at - it.at <= 30 * DAY_MS }
+            val merchant = p.merchant ?: return@mapNotNull null
+            val usual = s.payments.filter { it.merchant == merchant && it.currency == p.currency && it.at < p.at && p.at - it.at <= 30 * DAY_MS }
             if (usual.isEmpty()) return@mapNotNull null
-            val average = usual.sumOf { it.amount } / usual.size
-            if (p.amount <= UNUSUAL_FACTOR * average) return@mapNotNull null
+            val average = usual.sumOf { it.amountMinor } / usual.size
+            if (p.amountMinor <= UNUSUAL_FACTOR * average) return@mapNotNull null
+            val amount = Money.format(p.amountMinor, p.currency)
+            val avg = Money.format(average, p.currency)
             Nudge(
                 NudgeKind.UNUSUAL_PAYMENT, tr("Larger payment than usual", "평소보다 큰 결제예요"),
-                tr("${p.merchant.take(16)} ${won(p.amount)} · usually ${won(average)}", "${p.merchant.take(16)} ${won(p.amount)} · 평소 ${won(average)}"),
+                tr("${merchant.take(16)} $amount · usually $avg", "${merchant.take(16)} $amount · 평소 $avg"),
                 listOf(NudgeAction.prompt(tr("See payments", "결제 내역 보기"), tr("Check my recent payments", "최근 결제 내역 확인해줘"))),
-                p.at, p.at + 12 * HOUR_MS, "payment:${p.merchant}:${p.at}:${p.amount}",
+                p.at, p.at + 12 * HOUR_MS, "payment:${p.id}",
             )
         }
     }
@@ -342,7 +355,7 @@ object ProactiveEngine {
     // ---- helpers ---------------------------------------------------------------------------------
 
     /** A 1:1 message still in the shade: one that was read, answered or swiped away (removedAt) needs no nudge. */
-    private fun needsReply(n: StoredNotification) = n.removedAt == null && DigestClassifier.classify(n) == DigestBucket.REPLY
+    private fun NudgeSources.needsReply(n: StoredNotification) = DigestGroups.needsReply(n, facts[n.key])
 
     const val PARCEL_PROMPT_KO = "오늘 오는 택배 어디쯤 왔어?"
     const val PARCEL_PROMPT_EN = "Where are the parcels arriving today?"
@@ -374,8 +387,12 @@ object ProactiveEngine {
         else -> "at night"
     }
 
-    /** "₩48,300" */
-    fun won(amount: Long): String = "₩" + "%,d".format(Locale.US, amount)
+    /** The currency most of [payments] are in (KRW when there are none). */
+    fun mainCurrency(payments: List<PaymentRecord>): String =
+        payments.groupingBy { it.currency }.eachCount().maxByOrNull { it.value }?.key ?: "KRW"
+
+    /** "CJ대한통운", else what was ordered, else "택배". */
+    fun parcelName(p: ParcelRecord): String = p.carrier ?: p.itemHint?.take(20) ?: tr("Parcel", "택배")
 }
 
 /** The briefing's own text (the weather line is added later by the one model call, when it works). */

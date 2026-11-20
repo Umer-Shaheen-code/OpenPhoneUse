@@ -1,5 +1,7 @@
 package com.phoneuse.ui.settings
 
+import com.phoneuse.understand.UnderstandScheduler
+import com.phoneuse.understand.UnderstandText
 import com.phoneuse.i18n.tr
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -49,7 +51,6 @@ import com.phoneuse.app.FontSize
 import com.phoneuse.app.QuietHours
 import com.phoneuse.app.ScreenContent
 import com.phoneuse.app.UnfoldedLayout
-import com.phoneuse.app.VoiceLanguage
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -191,13 +192,14 @@ fun SettingsScreen(
     val retention by settings.retentionDays.collectAsState(0)
     val confirmSend by settings.confirmSend.collectAsState(true)
     val riskJudge by settings.riskJudge.collectAsState(true)
+    val understand by settings.understandNotifications.collectAsState(true)
     val assistAction by settings.assistAction.collectAsState(AssistAction.SUGGEST)
     val speed by settings.controlSpeed.collectAsState(ControlSpeed.NORMAL)
     val summaryMinute by settings.summaryMinute.collectAsState(SettingsStore.DEFAULT_SUMMARY_MINUTE)
     val quiet by settings.quietHours.collectAsState(QuietHours())
     val fontSize by settings.fontSize.collectAsState(FontSize.DEFAULT)
     val unfolded by settings.unfoldedLayout.collectAsState(UnfoldedLayout.SIDE_BY_SIDE)
-    val voice by settings.voiceLanguage.collectAsState(VoiceLanguage.KOREAN)
+    val voice by settings.voiceLanguage.collectAsState(SettingsStore.DEFAULT_VOICE_LANGUAGE)
     val readAloud by settings.readAloud.collectAsState(false)
     val screenContent by settings.screenContent.collectAsState(ScreenContent.ALL)
 
@@ -326,6 +328,9 @@ fun SettingsScreen(
             Section(tr("Privacy", "개인정보"))
             Group {
                 ValueRow(tr("Screen content sent to the model", "모델에 보내는 화면 내용"), label(SCREEN_LABELS, screenContent), onClick = { choice = Choice.SCREEN }, first = true)
+                SwitchRow(UnderstandText.TITLE, UnderstandText.subtitle(account.mode), understand) { v ->
+                    scope.launch { UnderstandScheduler.setEnabled(context, v) }
+                }
                 Row(
                     Modifier
                         .fillMaxWidth()

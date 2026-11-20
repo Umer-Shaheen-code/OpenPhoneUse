@@ -43,7 +43,7 @@ internal object PhoneToolSpecs {
                 required = listOf("time", "text"),
                 props = mapOf(
                     "time" to prop("string", "HH:mm (next occurrence) or ISO 8601 local date-time, e.g. 2026-11-02T08:30."),
-                    "text" to prop("string", "What the notification says, in Korean."),
+                    "text" to prop("string", "What the notification says, ${AgentPrompt.IN_USER_LANGUAGE}."),
                 ),
             ),
         ),
@@ -72,7 +72,7 @@ internal object PhoneToolSpecs {
         ToolSpec(
             "calendar_add",
             "Add a calendar event. Without confirmed it saves nothing: it shows an event preview card with overlapping events. " +
-                "When the user then confirms (the card's [그대로 저장]), call again with the same values and confirmed=true " +
+                "When the user then confirms (the card's save button), call again with the same values and confirmed=true " +
                 "as the first tool of that turn.",
             schema(
                 required = listOf("title", "start", "end"),
@@ -145,14 +145,14 @@ internal object PhoneToolSpecs {
                 required = listOf("uris", "question"),
                 props = mapOf(
                     "uris" to arr(str(), "content://media/… uris from photos_find."),
-                    "question" to prop("string", "What to look for, in Korean."),
+                    "question" to prop("string", "What to look for, ${AgentPrompt.IN_USER_LANGUAGE}."),
                 ),
             ),
         ),
         ToolSpec(
             "photos_album",
             "Make an album: copy photos into Pictures/<name>/ (originals stay). Without confirmed it only shows a photos card; " +
-                "when the user confirms (its [앨범 만들기]), call again with confirmed=true.",
+                "when the user confirms (the card's make-album button), call again with confirmed=true.",
             schema(
                 required = listOf("name", "uris"),
                 props = mapOf(

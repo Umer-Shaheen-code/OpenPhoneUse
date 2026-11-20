@@ -31,6 +31,7 @@ import com.phoneuse.routine.ReminderScheduler
 import com.phoneuse.screen.ScreenSnapshot
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import java.lang.reflect.Proxy
 import java.security.MessageDigest
@@ -84,6 +85,10 @@ class ToolSpecsPinTest {
         assertEquals(FULL_HASH, hash(specs))
     }
 
+    @Test fun noToolTellsTheModelToWriteKorean() {
+        for (s in full().specs) assertFalse(s.name, "${s.description}${s.parameters}".contains("in Korean"))
+    }
+
     @Test fun bareToolListIsPinned() {
         val specs = ToolExecutor(device(), FakeUserGate()).specs
         assertEquals(BARE_NAMES, specs.map { it.name })
@@ -111,7 +116,7 @@ class ToolSpecsPinTest {
             "flashlight", "set_volume", "media_control", "device_status", "recent_calls", "add_contact",
             "mcp__notion__search",
         )
-        const val BARE_HASH = "14ddf062771a5913479a589eb2a5457c9b895708b674fa45ead4c7734cf2af23"
-        const val FULL_HASH = "82ca87b9ee3c8ad01b6fb0645704965ef9e37b3a479a60b9e3e360a6d6be4741"
+        const val BARE_HASH = "95843fa10990c4ae4a8e20ab0d6796416a6faa4acaa0b3a9154adb73382e6e56"
+        const val FULL_HASH = "0696f426474474b49cd928614a2c271bea8f11f46134b8faeb2b990f2544dd8f"
     }
 }

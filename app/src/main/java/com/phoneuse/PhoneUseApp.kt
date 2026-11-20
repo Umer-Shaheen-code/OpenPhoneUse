@@ -17,6 +17,7 @@ class PhoneUseApp : Application() {
             osmdroidTileCache = File(cacheDir, "osmdroid/tiles")
         }
         AppGraph.init(this)
+        com.phoneuse.understand.UnderstandScheduler.ensureSweep(this)
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
@@ -32,5 +33,6 @@ class PhoneUseApp : Application() {
             android.os.LocaleList.getEmptyLocaleList()
         }
         Lang.update(if (perApp.isEmpty) config.locales else perApp)
+        com.phoneuse.i18n.Region.update(android.content.res.Resources.getSystem().configuration.locales)
     }
 }
