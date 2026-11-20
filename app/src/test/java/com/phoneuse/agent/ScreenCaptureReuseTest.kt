@@ -51,6 +51,20 @@ class ScreenCaptureReuseTest {
         }
     }
 
+    @Test fun partialEmptyAndUnidentifiedTreesNeedAnotherCheckBeforeAnAction() = runTest {
+        val panel = screen("Panel")
+        for (tree in listOf(panel.copy(truncated = true), panel.copy(roots = emptyList()), panel.copy(packageName = null))) {
+            val device = FakeDeviceController(listOf(tree))
+            val executor = ToolExecutor(device, FakeUserGate())
+            val seen = executor.observe().screen
+            device.calls.clear()
+
+            val result = executor.execute(scroll, seen)
+            assertTrue(result.output, result.output.startsWith("OK"))
+            assertEquals(listOf("screenshot()", "scroll(screen,down)", "screenshot()"), device.capturesAndActions())
+        }
+    }
+
     @Test fun waitingForALabelCapturesTheMatchAndTheResult() = runTest {
         val ready = screen("Continue")
         val delayed = listOf(screen("Home"), screen("Loading"), screen("Almost done"), ready)
@@ -74,11 +88,32 @@ class ScreenCaptureReuseTest {
             device.calls.clear()
 
             val result = executor.execute(tapWhenReady, seen)
-            assertTrue(result.output, result.output.contains("no element \"Continue\" appeared"))
+            assertTrue(result.output, result.output.contains("timed out waiting for \"Continue\""))
             assertTrue(result.output, result.output.contains("\"Loading\""))
             assertEquals(images, result.screenshot != null)
             assertEquals(listOf("screenshot()"), device.capturesAndActions())
         }
+    }
+
+    @Test fun aLabelFirstShownDuringTheFinalCaptureRetryKeepsTheTimeoutAndDoesNotTap() = runTest {
+        val home = screen("Home").copy(packageName = "com.example.home")
+        val device = FakeDeviceController(listOf(home, screen("Loading")))
+        val executor = ToolExecutor(device, FakeUserGate())
+        val seen = executor.observe().screen
+        device.calls.clear()
+        device.screenshotResult = null
+        // The final observation retries in the newly opened app. The button appears during that retry.
+        device.snapshotHook = { frame ->
+            if ("screenshot()" in device.calls) {
+                device.screenshotResult = byteArrayOf(1)
+                screen("Continue")
+            } else frame
+        }
+
+        val result = executor.execute(tapWhenReady, seen)
+        assertTrue(result.output, result.output.startsWith("1. tap: STOPPED: timed out waiting for \"Continue\""))
+        assertEquals("Continue", result.screen?.labels?.get(1))
+        assertEquals(listOf("screenshot()", "screenshot()"), device.capturesAndActions())
     }
 
     @Test fun aFailedCaptureAtTimeoutWithholdsTheLabelDiagnosisAndKeepsCompletedSteps() = runTest {
@@ -96,7 +131,7 @@ class ScreenCaptureReuseTest {
             val result = executor.execute(batch, seen)
             assertTrue(result.output, result.output.startsWith("1. wait: OK"))
             assertTrue(result.output, result.output.contains("get_screen"))
-            assertFalse(result.output, result.output.contains("no element"))
+            assertFalse(result.output, result.output.contains("timed out waiting for"))
             assertFalse(result.output, result.output.contains("Continue"))
             assertFalse(result.output, result.output.contains("Loading"))
             assertTrue(requireNotNull(result.screen).captureBlocked)

@@ -1427,7 +1427,7 @@ class ToolExecutorTest {
             call("batch", """{"actions":[{"tool":"tap","args":{"index":1}},{"tool":"tap","args":{"target":"검색"}},{"tool":"tap","args":{"index":1}}]}"""),
             screenOf(base),
         )
-        assertTrue(r.output, r.output.contains("2. tap: STOPPED: no element \"검색\" appeared"))
+        assertTrue(r.output, r.output.contains("2. tap: STOPPED: timed out waiting for \"검색\""))
         assertEquals(1, dev.calls.count { it.startsWith("tap") })
         assertTrue(r.output.contains("\"X\""))
     }

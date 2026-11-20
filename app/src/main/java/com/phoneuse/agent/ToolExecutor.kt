@@ -729,7 +729,7 @@ class ToolExecutor(
                     if (found == null) {
                         val result = screenResult("", seen)
                         val reason = if (result.screen?.captureBlocked == true) "screen capture failed"
-                            else "no element \"$target\" appeared"
+                            else "timed out waiting for \"$target\""
                         lines += "$n. $tool: STOPPED: $reason"
                         return result.copy(output = lines.joinToString("\n") + "\n\n" + result.output)
                     }

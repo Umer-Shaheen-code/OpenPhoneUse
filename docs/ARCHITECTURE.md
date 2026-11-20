@@ -79,7 +79,8 @@ attempt. `screenshot` remains a tool for a fresh look.
   - a 1.5 s cap.
 - **Batches.** `batch` runs several steps in one model call.
   - A step can name its element by `index`, which refers to the screen the model saw.
-  - A step can instead name it by `target`. The agent polls the tree for up to 3 s and checks capture when the label appears.
+  - A step can instead name it by `target`. The agent waits 150 ms between tree reads, for up to 3 s of waiting,
+    and checks capture when the label appears. Tree reads and the final capture add to the elapsed time.
   - Either way, one model call can go through several screens.
 - **Live re-check.** Before every act, the live screen is read again and the target element is found there.
   - An identical, complete tree in the same voice session can reuse its last successful capture check before the action.
