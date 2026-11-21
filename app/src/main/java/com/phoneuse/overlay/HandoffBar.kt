@@ -29,9 +29,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,7 +47,7 @@ import com.phoneuse.ui.theme.PuIcons
 import com.phoneuse.ui.theme.StopCircle
 import com.phoneuse.ui.theme.pu
 
-/** Keeps the instructions available without covering the app until the user asks to read them. */
+/** Shows the handoff reason in one line until the user expands it. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun HandoffBar(
@@ -73,49 +78,56 @@ internal fun HandoffBar(
             .padding(4.dp)
             .verticalScroll(panelScroll),
     ) {
+        key(card.id) {
+            // Only the reason is live. Moving the bar or expanding the visible text keeps its announcement stable.
+            val toggleLabel = if (expanded) tr("Hide handoff instructions", "직접 조작 안내 접기")
+                else tr("Show handoff instructions", "직접 조작 안내 펼치기")
+            Row(
+                Modifier
+                    .heightIn(min = 48.dp)
+                    .clip(shape)
+                    .clickable(role = Role.Button, onClickLabel = toggleLabel) { expanded = !expanded }
+                    .semantics {
+                        contentDescription = card.reason
+                        liveRegion = LiveRegionMode.Polite
+                    }
+                    .padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(PuIcons.Lock, null, Modifier.size(20.dp), tint = c.secure)
+                // Where both rows fit, only the reason scrolls. Otherwise the whole bar can scroll.
+                val instructions = if (expanded && reasonRoom >= 48.dp) {
+                    Modifier.heightIn(max = minOf(reasonRoom, 144.dp)).verticalScroll(rememberScrollState())
+                } else Modifier
+                Text(
+                    card.reason,
+                    Modifier.weight(1f, fill = false).then(instructions).clearAndSetSemantics {},
+                    maxLines = if (expanded) Int.MAX_VALUE else 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = c.text2, fontSize = 14.sp, lineHeight = 20.sp,
+                )
+                Icon(if (expanded) PuIcons.ChevronUp else PuIcons.ChevronDown, null, Modifier.size(14.dp), tint = c.textSub)
+            }
+        }
         FlowRow(
             modifier = Modifier.onSizeChanged { actionsHeight = it.height },
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Row(
-                Modifier
-                    .size(48.dp)
-                    .clip(shape)
-                    .clickable(role = Role.Button) { expanded = !expanded }
-                    .semantics {
-                        contentDescription = if (expanded) tr("Hide handoff instructions", "직접 조작 안내 접기")
-                        else tr("Show handoff instructions", "직접 조작 안내 펼치기")
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Icon(PuIcons.Lock, null, Modifier.size(20.dp), tint = c.secure)
-                Icon(if (expanded) PuIcons.ChevronUp else PuIcons.ChevronDown, null, Modifier.size(14.dp), tint = c.textSub)
-            }
             PuButton(
                 tr("Move", "이동"),
                 onClick = {
                     expanded = false
                     onMove()
                 },
-                modifier = Modifier.semantics { contentDescription = tr("Move panel to the opposite edge", "패널을 반대쪽 가장자리로 이동") },
+                modifier = Modifier.semantics {
+                    onClick(label = tr("Move panel to the opposite edge", "패널을 반대쪽 가장자리로 이동"), action = null)
+                },
                 kind = ButtonKind.OUTLINE, fontSize = 14,
             )
-            PuButton(tr("Done, continue", "완료, 이어서 해줘"), onDone, fontSize = 14)
+            PuButton(tr("Done, continue", "완료, 이어서 해줘"), onDone, fontSize = 14, maxLines = Int.MAX_VALUE)
             StopCircle(onStop, Modifier.size(48.dp))
-        }
-        if (expanded) {
-            // Keep the actions in place when the instructions have room for a line. In a thinner
-            // strip, scroll the whole panel so the user can still reach every action and the full reason.
-            val instructions = if (reasonRoom >= 48.dp) {
-                Modifier.heightIn(max = minOf(reasonRoom, 144.dp)).verticalScroll(rememberScrollState())
-            } else Modifier
-            Text(
-                card.reason,
-                instructions.padding(8.dp),
-                color = c.text2, fontSize = 14.sp, lineHeight = 20.sp,
-            )
         }
     }
 }

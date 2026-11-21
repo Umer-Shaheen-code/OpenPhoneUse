@@ -37,7 +37,7 @@ class HandoffPlacementTest {
         assertEquals(area, usable)
         val previousBar = Bounds(120, 80, 280, 128)
         val bottomControl = Bounds(120, 620, 280, 680)
-        assertEquals(572, handoffBarTop(usable, 160, 48, listOf(previousBar, bottomControl), true, listOf(area)))
+        assertEquals(564, handoffBarTop(usable, 160, 48, listOf(previousBar, bottomControl), true, listOf(area), clearance = 8))
         val narrowStrip = area.copy(top = area.top + 47)
         assertEquals(area, handoffArea(area, narrowStrip, 48))
     }
@@ -56,7 +56,7 @@ class HandoffPlacementTest {
 
         assertEquals(listOf(key.bounds), controls.targets)
         assertEquals(listOf(area), controls.containers)
-        assertEquals(180, handoffBarTop(area, 160, 48, controls.targets, false, controls.containers))
+        assertEquals(188, handoffBarTop(area, 160, 48, controls.targets, false, controls.containers, clearance = 8))
     }
 
     @Test
@@ -64,7 +64,7 @@ class HandoffPlacementTest {
         val key = button(Bounds(120, 80, 280, 180))
         val panel = button(Bounds(40, 80, 360, 320)).copy(children = listOf(key))
         val controls = ScreenSnapshot(null, 400, 700, listOf(panel)).handoffControls(setOf(1))
-        assertEquals(320, handoffBarTop(area, 160, 48, controls.targets, false, controls.containers))
+        assertEquals(328, handoffBarTop(area, 160, 48, controls.targets, false, controls.containers, clearance = 8))
     }
 
     @Test
@@ -76,54 +76,67 @@ class HandoffPlacementTest {
         val screen = ScreenSnapshot(null, 400, 700, listOf(picture, key, closed, system), systemWindowIds = setOf(4))
         val controls = screen.handoffControls(setOf(1, 2, 4))
         assertEquals(listOf(picture.bounds, key.bounds), controls.targets)
-        assertEquals(180, handoffBarTop(area, 160, 48, controls.targets, false, controls.containers))
+        assertEquals(188, handoffBarTop(area, 160, 48, controls.targets, false, controls.containers, clearance = 8))
     }
 
     @Test
     fun bottomKeypadLeavesTheBarAtTheTop() {
         val keypad = listOf(Bounds(40, 400, 360, 680))
-        assertEquals(80, handoffBarTop(area, 160, 48, keypad, preferBottom = false))
-        assertEquals(352, handoffBarTop(area, 160, 48, keypad, preferBottom = true))
+        assertEquals(80, handoffBarTop(area, 160, 48, keypad, preferBottom = false, clearance = 8))
+        assertEquals(344, handoffBarTop(area, 160, 48, keypad, preferBottom = true, clearance = 8))
     }
 
     @Test
     fun topKeypadPlacesTheBarJustBelowItsLastRow() {
         val rows = listOf(Bounds(40, 150, 360, 230), Bounds(40, 70, 360, 160))
-        assertEquals(230, handoffBarTop(area, 160, 48, rows, preferBottom = false))
+        assertEquals(238, handoffBarTop(area, 160, 48, rows, preferBottom = false, clearance = 8))
     }
 
     @Test
     fun centralGapFitsTheBarExactlyFromEitherDirection() {
         val controls = listOf(Bounds(40, 310, 360, 680), Bounds(40, 70, 360, 262))
-        assertEquals(262, handoffBarTop(area, 160, 48, controls, preferBottom = false))
-        assertEquals(262, handoffBarTop(area, 160, 48, controls, preferBottom = true))
+        assertEquals(262, handoffBarTop(area, 160, 48, controls, preferBottom = false, clearance = 8))
+        assertEquals(262, handoffBarTop(area, 160, 48, controls, preferBottom = true, clearance = 8))
     }
 
     @Test
-    fun controlsTouchingTheBarAtItsSidesDoNotDisplaceIt() {
+    fun leavesClearanceBesideAControlWhenPossible() {
+        val sideKey = Bounds(40, 80, 120, 180)
+        assertEquals(188, handoffBarTop(area, 160, 48, listOf(sideKey), preferBottom = false, clearance = 8))
+    }
+
+    @Test
+    fun leavesClearanceAtTheBoundaryOfADockedKeyboard() {
+        val keyboard = area.copy(top = 400)
+        val strip = handoffArea(area, keyboard, 48)
+        assertEquals(344, handoffBarTop(strip, 160, 48, emptyList(), true, listOf(keyboard), clearance = 8))
+    }
+
+    @Test
+    fun controlsTouchingTheBarAtBothSidesStillAllowAnExactFit() {
         val sides = listOf(Bounds(40, 80, 120, 680), Bounds(280, 80, 360, 680))
-        assertEquals(80, handoffBarTop(area, 160, 48, sides, preferBottom = false))
-        assertEquals(632, handoffBarTop(area, 160, 48, sides, preferBottom = true))
+        assertEquals(80, handoffBarTop(area, 160, 48, sides, preferBottom = false, clearance = 8))
+        assertEquals(632, handoffBarTop(area, 160, 48, sides, preferBottom = true, clearance = 8))
     }
 
     @Test
     fun noGapTallEnoughFallsBackToTheRequestedEdge() {
         val controls = listOf(Bounds(40, 80, 360, 280), Bounds(40, 300, 360, 680))
-        assertEquals(80, handoffBarTop(area, 160, 48, controls, preferBottom = false))
-        assertEquals(632, handoffBarTop(area, 160, 48, controls, preferBottom = true))
+        assertEquals(80, handoffBarTop(area, 160, 48, controls, preferBottom = false, clearance = 8))
+        assertEquals(632, handoffBarTop(area, 160, 48, controls, preferBottom = true, clearance = 8))
     }
 
     @Test
     fun areaShorterThanTheBarAnchorsItAtTheTop() {
         val short = Bounds(40, 120, 360, 140)
-        assertEquals(120, handoffBarTop(short, 160, 48, emptyList(), preferBottom = false))
-        assertEquals(120, handoffBarTop(short, 160, 48, emptyList(), preferBottom = true))
+        assertEquals(120, handoffBarTop(short, 160, 48, emptyList(), preferBottom = false, clearance = 8))
+        assertEquals(120, handoffBarTop(short, 160, 48, emptyList(), preferBottom = true, clearance = 8))
     }
 
     @Test
     fun narrowWindowUsesItsFullWidth() {
         val narrow = Bounds(75, 80, 105, 680)
         val control = Bounds(75, 80, 77, 130)
-        assertEquals(130, handoffBarTop(narrow, 160, 48, listOf(control), preferBottom = false))
+        assertEquals(138, handoffBarTop(narrow, 160, 48, listOf(control), preferBottom = false, clearance = 8))
     }
 }

@@ -51,6 +51,7 @@ internal fun handoffBarTop(
     controls: List<Bounds>,
     preferBottom: Boolean,
     containers: List<Bounds> = emptyList(),
+    clearance: Int,
 ): Int {
     if (area.isEmpty || barHeight >= area.bottom - area.top) return area.top
     val lastTop = area.bottom - barHeight.coerceAtLeast(0)
@@ -61,15 +62,19 @@ internal fun handoffBarTop(
     val left = area.left + (area.right - area.left - width) / 2
     fun clearTop(obstacles: List<Bounds>): Int? {
         val ordered = if (preferBottom) obstacles.sortedByDescending { it.bottom } else obstacles.sortedBy { it.top }
-        var top = edge
-        for (obstacle in ordered) {
-            if (obstacle.intersects(Bounds(left, top, left + width, top + barHeight))) {
-                // Every position up to the far side of this obstacle overlaps it.
-                top = if (preferBottom) obstacle.top - barHeight else obstacle.bottom
-                if (top !in area.top..lastTop) return null
+        fun place(gap: Int): Int? {
+            var top = edge
+            for (obstacle in ordered) {
+                val footprint = Bounds(left - gap, top - gap, left + width + gap, top + barHeight + gap)
+                if (obstacle.intersects(footprint)) {
+                    top = if (preferBottom) obstacle.top - barHeight - gap else obstacle.bottom + gap
+                    if (top !in area.top..lastTop) return null
+                }
             }
+            return top
         }
-        return top
+        // In a tight gap, keeping the controls tappable takes priority over leaving a margin.
+        return place(clearance) ?: place(0)
     }
 
     if (containers.isNotEmpty()) clearTop(controls + containers)?.let { return it }

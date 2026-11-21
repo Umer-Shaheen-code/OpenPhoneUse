@@ -25,7 +25,7 @@ import com.phoneuse.agent.GlobalAction
 import com.phoneuse.agent.ScreenMark
 import com.phoneuse.agent.ServiceUnavailableException
 import com.phoneuse.overlay.HandoffControls
-import com.phoneuse.overlay.handoffControls
+import com.phoneuse.overlay.HandoffWindows
 import com.phoneuse.screen.ScreenSnapshot
 import com.phoneuse.screen.ScreenBusy
 import com.phoneuse.screen.TreeCompressor
@@ -107,12 +107,9 @@ class AccessibilityDeviceController(
     private val shown = ArrayDeque<Read>()
 
     /** Place the handoff using the last screen we already showed, without reading the app during private input. */
-    internal fun lastShownControls(windowIds: Set<Int>, width: Int, height: Int, keyboardVisible: Boolean): HandoffControls {
+    internal fun lastShownControls(windows: HandoffWindows, width: Int, height: Int): HandoffControls {
         val screen = synchronized(shown) { shown.firstOrNull()?.snap } ?: return HandoffControls()
-        if (screen.displayWidth != width || screen.displayHeight != height || screen.keyboardVisible != keyboardVisible) {
-            return HandoffControls()
-        }
-        return screen.handoffControls(windowIds)
+        return windows.controlsFrom(screen, width, height)
     }
 
     override suspend fun snapshot(): ScreenSnapshot {
