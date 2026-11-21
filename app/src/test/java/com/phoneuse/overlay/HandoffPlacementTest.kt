@@ -21,6 +21,16 @@ class HandoffPlacementTest {
     }
 
     @Test
+    fun shortSpaceStillAllowsBothRowsOfTheCollapsedBar() {
+        assertEquals(300, handoffBarMaxHeight(600, 104))
+        // Above a keyboard in landscape, half the space is less than the two rows need.
+        assertEquals(104, handoffBarMaxHeight(170, 104))
+        assertEquals(104, handoffBarMaxHeight(104, 104))
+        assertEquals(80, handoffBarMaxHeight(80, 104))
+        assertEquals(0, handoffBarMaxHeight(-20, 104))
+    }
+
+    @Test
     fun moveCanLeaveAndReturnToASingleRowAboveTheKeyboard() {
         val strip = area.copy(bottom = area.top + 48)
         val keyboard = area.copy(top = strip.bottom)

@@ -19,6 +19,12 @@ internal fun handoffArea(area: Bounds, keyboard: Bounds?, minBarHeight: Int, mov
     return strip
 }
 
+/** At most half the area, so Move can uncover where the bar was, but never less than the collapsed bar needs. */
+internal fun handoffBarMaxHeight(areaHeight: Int, collapsedHeight: Int): Int {
+    val height = areaHeight.coerceAtLeast(0)
+    return (height / 2).coerceAtLeast(collapsedHeight).coerceAtMost(height)
+}
+
 /** Use only the cached geometry of app windows that are still on this display. */
 internal fun ScreenSnapshot.handoffControls(windowIds: Set<Int>): HandoffControls {
     val targets = mutableListOf<Bounds>()

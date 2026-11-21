@@ -435,14 +435,13 @@ class OverlayManager(private val service: PhoneUseAccessibilityService) : Overla
         )
         val ime = handoffWindows.keyboard
         val density = service.resources.displayMetrics.density
-        val minHeight = (56 * density).roundToInt() // One row with its padding.
+        val minHeight = (HANDOFF_BAR_COLLAPSED_DP * density).roundToInt()
         if (moveFrom != null) movedFrom = moveFrom
         val usable = handoffArea(area, ime, minHeight, movedFrom)
         // Bound the expanded instructions as well. Move needs room to uncover the previous footprint.
-        val height = (usable.bottom - usable.top).coerceAtLeast(0)
         handoffSize = IntSize(
             (usable.right - usable.left).coerceAtLeast(0),
-            (height / 2).coerceAtLeast(minHeight).coerceAtMost(height),
+            handoffBarMaxHeight(usable.bottom - usable.top, minHeight),
         )
         if (moveFrom != null) {
             handoffAtBottom = moveFrom.centerY <= usable.centerY

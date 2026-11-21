@@ -47,6 +47,9 @@ import com.phoneuse.ui.theme.PuIcons
 import com.phoneuse.ui.theme.StopCircle
 import com.phoneuse.ui.theme.pu
 
+/** Two 48dp rows (the reason, then the actions) and the bar's padding. Placement reserves this much. */
+internal const val HANDOFF_BAR_COLLAPSED_DP = 104
+
 /** Shows the handoff reason in one line until the user expands it. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -62,16 +65,19 @@ internal fun HandoffBar(
     var expanded by remember(card.id) { mutableStateOf(false) }
     val panelScroll = key(card.id) { rememberScrollState() }
     var actionsHeight by remember { mutableIntStateOf(0) }
+    var reasonHeight by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     // Keep one action reachable even when the IME occupies the entire display.
     val maxWidth = with(density) { availableSize?.width?.toDp()?.coerceIn(56.dp, 400.dp) ?: 400.dp }
     val maxHeight = with(density) { availableSize?.height?.toDp()?.coerceAtLeast(56.dp) ?: 400.dp }
     val reasonRoom = with(density) { maxHeight - actionsHeight.toDp() - 8.dp }
+    // Both rows stay in view while collapsed, so Stop and Done are never cut off where the bar is given less room.
+    val collapsedHeight = with(density) { (reasonHeight + actionsHeight).toDp() } + 8.dp
 
     Column(
         Modifier
             .widthIn(max = maxWidth)
-            .heightIn(max = maxHeight)
+            .heightIn(max = maxOf(maxHeight, collapsedHeight))
             .clip(shape)
             .background(c.surface)
             .border(1.dp, c.line, shape)
@@ -84,6 +90,7 @@ internal fun HandoffBar(
                 else tr("Show handoff instructions", "직접 조작 안내 펼치기")
             Row(
                 Modifier
+                    .onSizeChanged { if (!expanded) reasonHeight = it.height }
                     .heightIn(min = 48.dp)
                     .clip(shape)
                     .clickable(role = Role.Button, onClickLabel = toggleLabel) { expanded = !expanded }
