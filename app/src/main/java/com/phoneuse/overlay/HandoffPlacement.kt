@@ -66,7 +66,14 @@ internal fun handoffBarTop(
 
     val width = minOf(barWidth, area.right - area.left)
     val left = area.left + (area.right - area.left - width) / 2
-    fun clearTop(obstacles: List<Bounds>): Int? {
+    // The half of the area on the bar's own side. A keyboard or a saved-password sheet opens in the other half,
+    // and the bar cannot see those.
+    val middle = area.top + (area.bottom - area.top) / 2
+    fun inOwnHalf(top: Int): Boolean {
+        val center = top + barHeight / 2
+        return if (preferBottom) center >= middle else center <= middle
+    }
+    fun clearTop(obstacles: List<Bounds>, ownHalf: Boolean): Int? {
         val ordered = if (preferBottom) obstacles.sortedByDescending { it.bottom } else obstacles.sortedBy { it.top }
         fun place(gap: Int): Int? {
             var top = edge
@@ -77,12 +84,16 @@ internal fun handoffBarTop(
                     if (top !in area.top..lastTop) return null
                 }
             }
-            return top
+            return top.takeIf { !ownHalf || inOwnHalf(it) }
         }
         // In a tight gap, keeping the controls tappable takes priority over leaving a margin.
         return place(clearance) ?: place(0)
     }
 
-    if (containers.isNotEmpty()) clearTop(controls + containers)?.let { return it }
-    return clearTop(controls) ?: edge
+    // A clear place in the bar's own half comes first, even one without a margin. Only then does the bar cross over.
+    for (ownHalf in listOf(true, false)) {
+        if (containers.isNotEmpty()) clearTop(controls + containers, ownHalf)?.let { return it }
+        clearTop(controls, ownHalf)?.let { return it }
+    }
+    return edge
 }

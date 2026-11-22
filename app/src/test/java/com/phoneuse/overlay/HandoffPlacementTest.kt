@@ -78,6 +78,27 @@ class HandoffPlacementTest {
     }
 
     @Test
+    fun containerDetourThatWouldCrossTheScreenIsNotTaken() {
+        // A sign-in page whose form is one tappable container. Below it is where a password sheet opens.
+        val toolbar = Bounds(40, 80, 360, 130)
+        val field = Bounds(40, 240, 360, 300)
+        val submit = Bounds(40, 330, 360, 400)
+        val form = Bounds(40, 140, 360, 560)
+        val targets = listOf(toolbar, field, submit)
+        assertEquals(138, handoffBarTop(area, 160, 48, targets, false, listOf(form), clearance = 8))
+        assertEquals(632, handoffBarTop(area, 160, 48, targets, true, listOf(form), clearance = 8))
+    }
+
+    @Test
+    fun gapInTheBarsOwnHalfIsTakenWithoutAMarginBeforeCrossingTheScreen() {
+        // A sign-in page. The gap under the toolbar fits the bar but not its margin, and a password sheet opens below.
+        val page = listOf(Bounds(40, 80, 360, 130), Bounds(40, 180, 360, 250), Bounds(40, 260, 360, 400))
+        assertEquals(130, handoffBarTop(area, 160, 48, page, preferBottom = false, clearance = 8))
+        val mirrored = listOf(Bounds(40, 630, 360, 680), Bounds(40, 510, 360, 580), Bounds(40, 360, 360, 500))
+        assertEquals(582, handoffBarTop(area, 160, 48, mirrored, preferBottom = true, clearance = 8))
+    }
+
+    @Test
     fun retainsKeypadControlsBehindPictureInPictureAndSkipsClosedOrSystemWindows() {
         val picture = button(Bounds(40, 80, 100, 180), window = 2)
         val key = button(Bounds(120, 80, 280, 180), window = 1)
