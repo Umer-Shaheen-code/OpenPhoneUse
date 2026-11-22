@@ -63,6 +63,8 @@ internal fun HandoffBar(
     val c = pu
     val shape = RoundedCornerShape(12.dp)
     var expanded by remember(card.id) { mutableStateOf(false) }
+    // TalkBack repeats a live region whenever it changes, so the reason stops being one once the user opens it.
+    var opened by remember(card.id) { mutableStateOf(false) }
     val panelScroll = key(card.id) { rememberScrollState() }
     var actionsHeight by remember { mutableIntStateOf(0) }
     var reasonHeight by remember { mutableIntStateOf(0) }
@@ -85,7 +87,7 @@ internal fun HandoffBar(
             .verticalScroll(panelScroll),
     ) {
         key(card.id) {
-            // Only the reason is live. Moving the bar or expanding the visible text keeps its announcement stable.
+            // Only the reason is live, and only until the user first opens it. Moving the bar does not repeat it.
             val toggleLabel = if (expanded) tr("Hide handoff instructions", "직접 조작 안내 접기")
                 else tr("Show handoff instructions", "직접 조작 안내 펼치기")
             Row(
@@ -93,10 +95,13 @@ internal fun HandoffBar(
                     .onSizeChanged { if (!expanded) reasonHeight = it.height }
                     .heightIn(min = 48.dp)
                     .clip(shape)
-                    .clickable(role = Role.Button, onClickLabel = toggleLabel) { expanded = !expanded }
+                    .clickable(role = Role.Button, onClickLabel = toggleLabel) {
+                        opened = true
+                        expanded = !expanded
+                    }
                     .semantics {
                         contentDescription = card.reason
-                        liveRegion = LiveRegionMode.Polite
+                        if (!opened) liveRegion = LiveRegionMode.Polite
                     }
                     .padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
