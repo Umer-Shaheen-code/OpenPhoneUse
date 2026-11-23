@@ -237,7 +237,7 @@ class OverlayManager(private val service: AccessibilityService) : OverlayHooks, 
         applyState()
     }
 
-    override suspend fun <T> passThrough(x: Int, y: Int, block: suspend () -> T): T {
+    override suspend fun <T> passThrough(starts: List<Pair<Int, Int>>, block: suspend () -> T): T {
         if (!shown) return block()
         var hidesDock = false
         var entered = false
@@ -245,7 +245,7 @@ class OverlayManager(private val service: AccessibilityService) : OverlayHooks, 
             // Not cancellable: the increment and the finally below must stay balanced.
             withContext(NonCancellableMain) {
                 dropInputFocus()
-                hidesDock = isInDock(x, y)
+                hidesDock = starts.any { (x, y) -> isInDock(x, y) }
                 passDepth++
                 if (hidesDock) dockHideDepth++
                 entered = true
