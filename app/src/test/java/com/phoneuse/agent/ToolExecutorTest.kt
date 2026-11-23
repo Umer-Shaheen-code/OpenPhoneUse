@@ -779,7 +779,8 @@ class ToolExecutorTest {
         }
         val result = ex.execute(call("rotate", """{"x":540,"y":900,"direction":"clockwise","degrees":45}"""), screenOf(base))
         assertEquals(1, dev.gestures.size)
-        assertTrue(result.output, result.output.contains(ToolExecutor.PROTECTED))
+        // The first failure after a visible screen is withheld as a capture failure (see #31); the view never leaks.
+        assertTrue(result.output, result.output.contains("Screen capture failed"))
         assertFalse(result.output.contains("Private view"))
         assertNull(result.screenshot)
         val shots = dev.calls.count { it == "screenshot()" }
@@ -808,7 +809,7 @@ class ToolExecutorTest {
             }
             val result = ex.execute(action, screenOf(base))
             assertEquals(1, dev.gestures.size)
-            assertTrue(result.output, result.output.contains(ToolExecutor.PROTECTED))
+            assertTrue(result.output, result.output.contains("Screen capture failed"))
             assertFalse(result.output, result.output.contains("Private view"))
             assertTrue(dev.calls.none { it.startsWith("tap(") })
             assertNull(result.screenshot)
