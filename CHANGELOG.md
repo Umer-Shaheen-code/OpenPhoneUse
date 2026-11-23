@@ -8,6 +8,7 @@ All notable changes to OpenPhoneUse are listed here, newest first. The format fo
 - Photos and files finish importing into the conversation where you attached them, even if you switch chats.
 - The agent can adjust its finger spacing to rotate small objects, or swipe two fingers side by side to pan a canvas or tilt a 3D map.
 - When Android reports a failed display capture check, the agent withholds the screen and stops actions aimed at it, including in text-only mode and during a batch. A temporary failure prompts a fresh screen read. A failed retry on the same app produces a protection notice.
+- **Enter a PIN during handoff.** A compact bar shows what the agent needs you to do and leaves room for the app’s keypad. Tap the instructions to read more, **Move** to uncover a control, or **Done, continue** when you finish.
 
 ## [0.0.7] - 2026-11-15
 
