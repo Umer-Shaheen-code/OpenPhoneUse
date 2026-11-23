@@ -516,7 +516,8 @@ class ToolExecutor(
         val plan = planTwoFinger(tool, args)
         suspend fun checkScreen(before: CompressedScreen, fresh: CompressedScreen) {
             // Each check needs its own capture: a past success cannot authorize a new view in the same app.
-            if (requireVisible(fresh, freshCapture = true) !== fresh) throw StaleTarget(fresh)
+            val visible = requireVisible(fresh, freshCapture = true)
+            if (visible !== fresh) throw StaleTarget(visible)
             if (before.packageName != fresh.packageName ||
                 before.displayWidth != fresh.displayWidth || before.displayHeight != fresh.displayHeight ||
                 plan.starts.any { (x, y) -> !sameContact(x, y, before, fresh) }
@@ -536,7 +537,8 @@ class ToolExecutor(
             return checks.distinct()
         }
 
-        val now = liveScreen(live)
+        // checkScreen makes the one fresh capture check; probing here too would only add a rate-limited capture.
+        val now = (live ?: readNow()).also { actedOn = it }
         checkScreen(seen, now)
         val checks = confirmations(now)
         if (checks.isNotEmpty()) {
@@ -545,7 +547,7 @@ class ToolExecutor(
             if (!confirming.confirm(strongest.category, summary)) return null
             // A confirmation can remain on screen while the app or controls under the two fingers change.
             checkSession()
-            val fresh = liveScreen(null)
+            val fresh = readNow().also { actedOn = it }
             checkScreen(now, fresh)
             if (confirmations(fresh) != checks) throw StaleTarget(fresh)
         }
@@ -851,7 +853,8 @@ class ToolExecutor(
                     stepArgs = JsonObject(stepArgs + ("index" to JsonPrimitive(found)))
                 } else if (n >= 2) {
                     val next = refresh(afterTool = acted, baseline = working)
-                    val fresh = if (tool in SCREEN_TOOLS) requireVisible(next) else next
+                    // A two-finger gesture can change what the app allows to be captured without changing the tree.
+                    val fresh = if (tool in SCREEN_TOOLS) requireVisible(next, freshCapture = acted in TWO_FINGER_TOOLS) else next
                     val index = stepArgs.int("index")
                     if (index != null) {
                         // Indices refer to the screen the model saw; find that same element now.

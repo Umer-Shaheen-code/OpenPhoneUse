@@ -791,6 +791,44 @@ class ToolExecutorTest {
         assertEquals(1, dev.gestures.size)
     }
 
+    @Test fun batchStepAfterRotateRechecksCaptureOnIdenticalTree() = runTest {
+        val (dev, _, ex) = setup()
+        // The gesture leaves the tree unchanged, but the app stops allowing capture.
+        dev.snapshotHook = { before -> if (dev.gestures.isNotEmpty()) dev.screenshotResult = null; before }
+        val rotate = """{"tool":"rotate","args":{"x":540,"y":900,"direction":"clockwise","degrees":45}}"""
+        val tap = """{"tool":"tap","args":{"index":1}}"""
+        val result = ex.execute(call("batch", """{"actions":[$rotate,$tap]}"""), screenOf(base))
+        assertEquals(1, dev.gestures.size)
+        assertTrue(dev.calls.toString(), dev.calls.none { it.startsWith("tap(") })
+        assertNull(result.screenshot)
+    }
+
+    @Test fun twoFingerConfirmationRechecksCaptureAfterCard() = runTest {
+        val screen = base.copy(roots = listOf(button("결제하기", 300)))
+        val dev = FakeDeviceController(listOf(screen))
+        val gate = object : UserGate by FakeUserGate() {
+            override suspend fun confirm(category: RiskCategory, summary: String): Boolean {
+                dev.screenshotResult = null
+                return true
+            }
+        }
+        val result = ToolExecutor(dev, gate).execute(
+            call("rotate", """{"x":200,"y":330,"direction":"clockwise","degrees":90,"spread_px":64}"""), screenOf(screen),
+        )
+        assertTrue(dev.gestures.isEmpty())
+        assertTrue(result.output, result.output.contains("Screen capture failed"))
+        assertFalse(result.output.contains("결제하기"))
+        assertNull(result.screenshot)
+    }
+
+    @Test fun twoFingerGestureProbesCaptureOnceBeforeDispatch() = runTest {
+        val (dev, _, ex) = setup()
+        ex.execute(call("rotate", """{"x":540,"y":900,"direction":"clockwise","degrees":45}"""), screenOf(base))
+        val beforeGesture = dev.calls.takeWhile { it != "executeTwoFinger()" }
+        val afterLastRead = beforeGesture.drop(beforeGesture.lastIndexOf("snapshot()") + 1)
+        assertEquals(beforeGesture.toString(), 1, afterLastRead.count { it == "screenshot()" })
+    }
+
     @Test fun textOnlyGestureRechecksReturnedViewAndSubsequentBatchTargets() = runTest {
         val rotate = """{"tool":"rotate","args":{"x":540,"y":900,"direction":"clockwise","degrees":45}}"""
         val tap = """{"tool":"tap","args":{"target":"Private view"}}"""

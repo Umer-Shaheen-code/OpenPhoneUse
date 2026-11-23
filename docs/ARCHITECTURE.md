@@ -85,7 +85,8 @@ attempt. `screenshot` remains a tool for a fresh look.
   - Rotation and two-finger swipe use coordinates from the initial screen and can only run as the first step.
   - Either way, one model call can go through several screens.
 - **Live re-check.** Before every act, the live screen is read again and the target element is found there.
-  - An identical, complete tree in the same voice session can reuse its last successful capture check before the action.
+  - An identical, complete tree in the same voice session can reuse its last successful capture check before the action,
+    except for the batch step right after a two-finger gesture.
     Returning a screen to the model or resuming after confirmation requires a fresh capture check.
   - If the element is gone, the executor returns `STOPPED` with the fresh screen.
   - It never taps something that moved.
