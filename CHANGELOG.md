@@ -7,6 +7,7 @@ All notable changes to OpenPhoneUse are listed here, newest first. The format fo
 - Dictation in the floating panel fills its input so you can edit a follow-up before pressing Send. When the task ends, the chat keeps any unsent words from the panel.
 - Photos and files finish importing into the conversation where you attached them, even if you switch chats.
 - The agent can adjust its finger spacing to rotate small objects, or swipe two fingers side by side to pan a canvas or tilt a 3D map.
+- When Android reports a failed display capture check, the agent withholds the screen and stops actions aimed at it, including in text-only mode and during a batch. A temporary failure prompts a fresh screen read. A failed retry on the same app produces a protection notice.
 
 ## [0.0.7] - 2026-11-15
 

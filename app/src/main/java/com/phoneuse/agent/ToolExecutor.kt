@@ -14,6 +14,7 @@ import com.phoneuse.risk.RiskGuard
 import com.phoneuse.risk.RiskMatch
 import com.phoneuse.screen.Bounds
 import com.phoneuse.screen.CompressedScreen
+import com.phoneuse.screen.ScreenSnapshot
 import com.phoneuse.screen.TreeCompressor
 import com.phoneuse.screen.UiNode
 import kotlinx.coroutines.CancellationException
@@ -50,6 +51,7 @@ private class StepFail(message: String) : Exception(message)
 
 /** The element the model chose is no longer on the live screen [fresh]; nothing was done. */
 private class StaleTarget(val fresh: CompressedScreen) : Exception("screen changed")
+private class WithheldScreen(val screen: CompressedScreen) : Exception("screen capture failed")
 
 /**
  * [trustUserAuthorized] false (a run started from a card button, whose text the user did not write) makes
@@ -244,8 +246,15 @@ class ToolExecutor(
     /** Set by a quick settle (see [Speculation]); the loop takes it after each step. */
     private var watch: ScreenWatch? = null
 
-    /** Apps checked this run (see [isProtected]): true for one that blocks screen capture. */
+    /** Apps checked this run (see [checkedScreen]): true for a confirmed block, false for a previous success. */
     private val protectedApps = HashMap<String, Boolean>()
+
+    private class ScreenRead(val tree: ScreenSnapshot, val session: Int?) {
+        val screen = TreeCompressor.compress(tree)
+        var captureSucceeded = false
+    }
+
+    private var lastRead: ScreenRead? = null
 
     /** The pending [ScreenWatch] of the last screen read, if that read ended early; clears it. */
     fun takeWatch(): ScreenWatch? = watch.also { watch = null }
@@ -257,10 +266,7 @@ class ToolExecutor(
 
     suspend fun observe(): ToolResult {
         markThirdParty()
-        val screen = refresh()
-        val shot = look(screen)
-        if (isProtected(screen, shot, tried = screenshots)) return ToolResult("# Screen\n${protectedText(screen)}", screen, null, null)
-        return ToolResult("# Screen\n${screen.text}", screen, shot, null)
+        return screenResult("", refresh())
     }
 
     /**
@@ -285,19 +291,24 @@ class ToolExecutor(
             if (current != null && call.name in SCREEN_TOOLS && interruptedSinceRead()) return interrupted()
             val args = parseArgs(call.argumentsJson)
             if (call.name in TWO_FINGER_TOOLS) checkGestureTarget(args)
+            if (current == null && call.name in SCREEN_TOOLS) markThirdParty()
             if (current == null && call.name in SCREEN_TOOLS && namesSpot(call.name, args)) {
                 // An element number or point chosen before any screen was seen (a guess, or one remembered from an
                 // earlier run) would hit whatever is there now: show the screen instead.
-                return screenResult("STOPPED: $UNSEEN Nothing was done.", observe().screen ?: refresh())
+                return screenResult("STOPPED: $UNSEEN Nothing was done.", refresh())
             }
-            val screen = current ?: if (call.name in SCREEN_TOOLS) observe().screen else null
+            val screen = current ?: if (call.name in SCREEN_TOOLS) refresh() else null
             // An app that hides its screen from capture is never operated (see PROTECTED); leaving it is still allowed.
-            if (screen != null && call.name in SCREEN_TOOLS && isProtected(screen)) {
-                return ToolResult("STOPPED: nothing was done.\n\n# Screen\n${protectedText(screen)}", screen, null, null)
+            if (screen != null && call.name in SCREEN_TOOLS &&
+                (screen.captureBlocked || protectedApps[screen.packageName] == true)
+            ) {
+                throw WithheldScreen(screen)
             }
             dispatch(call, args, screen)
         } catch (e: ScreenInterruptedException) {
             interrupted()
+        } catch (e: WithheldScreen) {
+            withheldResult("STOPPED: nothing was done.\n\n# Screen\n", e.screen)
         } catch (e: StaleTarget) {
             screenResult("STOPPED: $STALE Nothing was done.", e.fresh)
         } catch (e: ServiceUnavailableException) {
@@ -360,7 +371,7 @@ class ToolExecutor(
 
     /** The live screen: [live] when the caller just read it (batch steps after the first), else read now. */
     private suspend fun liveScreen(live: CompressedScreen?): CompressedScreen =
-        (live ?: readNow()).also { actedOn = it }
+        (live ?: requireVisible(readNow())).also { actedOn = it }
 
     /**
      * Runs one screen-changing tool. Returns its result line, or null when the user declined. [live] is a screen read
@@ -405,7 +416,7 @@ class ToolExecutor(
                 if (gated == Gate.DENIED) return null
                 if (args.bool("submit") == true && !userAuthorized(args, now, index, text) &&
                     gated != Gate.CONFIRMED_SEND && !isSearchField(node) &&
-                    !confirming.confirm(RiskCategory.SEND, tr("Type and send: \"${preview(text, SEND_PREVIEW_CHARS)}\"", "입력 후 전송: \"${preview(text, SEND_PREVIEW_CHARS)}\""))
+                    !confirmOnScreen(now, RiskCategory.SEND, tr("Type and send: \"${preview(text, SEND_PREVIEW_CHARS)}\"", "입력 후 전송: \"${preview(text, SEND_PREVIEW_CHARS)}\""))
                 ) {
                     return null
                 }
@@ -415,9 +426,9 @@ class ToolExecutor(
             "scroll" -> {
                 val direction = args.requireStr("direction")
                 if (direction !in DIRECTIONS) throw ArgException("direction must be one of $DIRECTIONS")
+                val now = liveScreen(live)
                 val node = args.int("index")?.let { asked ->
                     val seen = need(screenOrNull)
-                    val now = liveScreen(live)
                     element(liveIndex(asked, seen, now), now)
                 }
                 if (!device.scroll(node, direction)) throw StepFail("$tool failed")
@@ -443,6 +454,7 @@ class ToolExecutor(
                     "out" -> false
                     else -> throw ArgException("zoom must be in or out")
                 }
+                liveScreen(live)
                 if (!device.pinch(args.requireInt("x"), args.requireInt("y"), zoomIn)) throw StepFail("$tool failed")
             }
             in TWO_FINGER_TOOLS -> return twoFingerStep(tool, args, need(screenOrNull), live, seenInterruptions ?: device.interruptions())
@@ -503,7 +515,9 @@ class ToolExecutor(
         if (duration !in 1..10_000) throw ArgException("duration_ms must be between 1 and 10000")
         val plan = planTwoFinger(tool, args)
         suspend fun checkScreen(before: CompressedScreen, fresh: CompressedScreen) {
-            if (isProtected(fresh, recheck = true) || before.packageName != fresh.packageName ||
+            // Each check needs its own capture: a past success cannot authorize a new view in the same app.
+            if (requireVisible(fresh, freshCapture = true) !== fresh) throw StaleTarget(fresh)
+            if (before.packageName != fresh.packageName ||
                 before.displayWidth != fresh.displayWidth || before.displayHeight != fresh.displayHeight ||
                 plan.starts.any { (x, y) -> !sameContact(x, y, before, fresh) }
             ) throw StaleTarget(fresh)
@@ -719,7 +733,7 @@ class ToolExecutor(
     ): Gate {
         val check = requiredConfirmation(tool, index, screen, args, point, swipe, typed) ?: return Gate.PASSED
         return when {
-            !confirming.confirm(check.category, check.summary) -> Gate.DENIED
+            !confirmOnScreen(screen, check.category, check.summary) -> Gate.DENIED
             check.category == RiskCategory.SEND -> Gate.CONFIRMED_SEND
             else -> Gate.CONFIRMED_OTHER
         }
@@ -748,6 +762,15 @@ class ToolExecutor(
             else -> true
         }
         return if (needsConfirm) Confirmation(cat, cardControl(tool, name, context, typed), judgment?.effect) else null
+    }
+
+    private suspend fun confirmOnScreen(before: CompressedScreen, category: RiskCategory, summary: String): Boolean {
+        val session = device.interruptions()
+        if (!confirming.confirm(category, summary)) return false
+        if (device.interruptions() != session) throw ScreenInterruptedException()
+        val now = requireVisible(readNow(), freshCapture = true)
+        if (now.packageName != before.packageName) throw StaleTarget(now)
+        return true
     }
 
     /**
@@ -791,7 +814,6 @@ class ToolExecutor(
             }
         }
         val lines = ArrayList<String>()
-        var usedTwoFingers = false
         var working = current
         var finalScreen: CompressedScreen? = null
         // The last step that ran; the UI is settled after it before the next step and before the final read.
@@ -817,17 +839,19 @@ class ToolExecutor(
                     // The first step looks on the live screen too: the model's screen may be seconds old, and the
                     // risk gate and the touch must see what is there now.
                     val start = if (n >= 2) refresh(afterTool = acted, baseline = working) else readNow()
-                    val (seen, found) = awaitTarget(target, start, afterTwoFingers = acted in TWO_FINGER_TOOLS)
+                    val (seen, found) = awaitTarget(target, start)
                     working = seen
                     if (found == null) {
-                        lines += "$n. $tool: STOPPED: no element \"$target\" appeared"
-                        finalScreen = seen
-                        break
+                        val result = screenResult("", seen)
+                        val reason = if (result.screen?.captureBlocked == true) "screen capture failed"
+                            else "timed out waiting for \"$target\""
+                        lines += "$n. $tool: STOPPED: $reason"
+                        return result.copy(output = lines.joinToString("\n") + "\n\n" + result.output)
                     }
                     stepArgs = JsonObject(stepArgs + ("index" to JsonPrimitive(found)))
                 } else if (n >= 2) {
-                    val fresh = refresh(afterTool = acted, baseline = working)
-                    if (acted in TWO_FINGER_TOOLS && isProtected(fresh, recheck = true)) throw StaleTarget(fresh)
+                    val next = refresh(afterTool = acted, baseline = working)
+                    val fresh = if (tool in SCREEN_TOOLS) requireVisible(next) else next
                     val index = stepArgs.int("index")
                     if (index != null) {
                         // Indices refer to the screen the model saw; find that same element now.
@@ -848,11 +872,13 @@ class ToolExecutor(
                 }
                 lines += "$n. $tool: $result"
                 acted = tool
-                if (tool in TWO_FINGER_TOOLS) usedTwoFingers = true
                 actedOn?.let { working = it }
             } catch (e: ScreenInterruptedException) {
                 lines += "$n. $tool: STOPPED: $INTERRUPTED"
                 break
+            } catch (e: WithheldScreen) {
+                lines += "$n. $tool: STOPPED: nothing was done."
+                return withheldResult(lines.joinToString("\n") + "\n\n# Screen\n", e.screen)
             } catch (e: StaleTarget) {
                 lines += "$n. $tool: STOPPED: $STALE"
                 finalScreen = e.fresh
@@ -869,7 +895,7 @@ class ToolExecutor(
                 break
             }
         }
-        return screenResult(lines.joinToString("\n"), finalScreen ?: refresh(afterTool = acted, baseline = working), afterTwoFingers = usedTwoFingers)
+        return screenResult(lines.joinToString("\n"), finalScreen ?: refresh(afterTool = acted, baseline = working))
     }
 
     /**
@@ -877,12 +903,20 @@ class ToolExecutor(
      * every [TARGET_POLL_MS] until [TARGET_WAIT_MS] has passed (a new screen still loading). When it never shows,
      * the last screen read and null.
      */
-    private suspend fun awaitTarget(label: String, first: CompressedScreen, afterTwoFingers: Boolean = false): Pair<CompressedScreen, Int?> {
+    private suspend fun awaitTarget(label: String, first: CompressedScreen): Pair<CompressedScreen, Int?> {
         var screen = first
         var waited = 0L
+        val session = seenInterruptions ?: device.interruptions()
         while (true) {
-            if (afterTwoFingers && isProtected(screen, recheck = true)) throw StaleTarget(screen)
-            findLabel(label, screen)?.let { return screen to it }
+            if (device.interruptions() != session) throw ScreenInterruptedException()
+            val index = findLabel(label, screen)
+            if (index != null) {
+                // Poll the tree locally. Check capture on the match, then use the index from that same tree.
+                val visible = requireVisible(screen, freshCapture = true)
+                val confirmedIndex = if (visible === screen) index else findLabel(label, visible)
+                if (confirmedIndex != null) return visible to confirmedIndex
+                screen = visible
+            }
             if (waited >= TARGET_WAIT_MS) return screen to null
             delay(TARGET_POLL_MS)
             waited += TARGET_POLL_MS
@@ -916,10 +950,7 @@ class ToolExecutor(
 
     private suspend fun screenshotTool(): ToolResult {
         if (!screenshots) return error("screenshots are off in settings (text only); use get_screen")
-        val before = TreeCompressor.compress(device.snapshot())
-        if (isProtected(before)) return ToolResult("STOPPED: nothing was done.\n\n# Screen\n${protectedText(before)}", before, null, null)
-        val shot = device.screenshot() ?: return error("screenshot blocked (secure screen)")
-        val screen = TreeCompressor.compress(device.snapshot())
+        val (screen, shot) = checkedScreen(readNow(), Capture.PLAIN)
         return ToolResult("OK\n\n# Screen\n${screen.text}", screen, shot, null)
     }
 
@@ -950,7 +981,7 @@ class ToolExecutor(
         }
         clock.settled(sinceMs(waitStart), how)
         val readStart = System.nanoTime()
-        val screen = TreeCompressor.compress(device.snapshot())
+        val screen = readTree()
         clock.read(sinceMs(readStart), screen.text.length)
         if (remaining > 0) watch = ScreenWatch(screen.text.hashCode(), remaining, ScreenJournal.fingerprint(screen))
         return screen
@@ -976,29 +1007,39 @@ class ToolExecutor(
     private suspend fun readNow(): CompressedScreen {
         seenInterruptions = device.interruptions()
         val readStart = System.nanoTime()
-        val screen = TreeCompressor.compress(device.snapshot())
+        val screen = readTree()
         clock.read(sinceMs(readStart), screen.text.length)
         return screen
     }
 
-    private suspend fun settled(head: String, afterTool: String? = null, baseline: CompressedScreen? = null): ToolResult =
-        screenResult(head, refresh(afterTool, baseline), afterTwoFingers = afterTool in TWO_FINGER_TOOLS)
+    /** Reuse a checked read only while the complete tree, including window IDs and bounds, still matches. */
+    private suspend fun readTree(): CompressedScreen {
+        val tree = device.snapshot()
+        val previous = lastRead
+        if (previous != null && previous.session == seenInterruptions && !tree.truncated &&
+            tree.packageName != null && tree.roots.isNotEmpty() && previous.tree == tree
+        ) return previous.screen
+        return ScreenRead(tree, seenInterruptions).also { lastRead = it }.screen
+    }
 
-    private suspend fun screenResult(head: String, screen: CompressedScreen, afterTwoFingers: Boolean = false): ToolResult {
-        val shot = look(screen)
-        if (isProtected(screen, shot, tried = screenshots, recheck = afterTwoFingers)) {
-            return ToolResult("$head\n\n# Screen\n${protectedText(screen)}", screen, null, null)
+    private suspend fun settled(head: String, afterTool: String? = null, baseline: CompressedScreen? = null): ToolResult =
+        screenResult(head, refresh(afterTool, baseline))
+
+    private suspend fun screenResult(head: String, screen: CompressedScreen): ToolResult {
+        val prefix = if (head.isEmpty()) "# Screen\n" else "$head\n\n# Screen\n"
+        return try {
+            val (visible, image) = checkedScreen(screen, if (screenshots) Capture.MARKED else Capture.PROBE)
+            ToolResult(prefix + visible.text, visible, image, null)
+        } catch (e: WithheldScreen) {
+            withheldResult(prefix, e.screen)
         }
-        return ToolResult("$head\n\n# Screen\n${screen.text}", screen, shot, null)
     }
 
     /**
      * The screenshot that goes with every screen read (vision first): each listed element that can be acted on is
-     * outlined and tagged with its number, so what the model sees matches the list it acts by. Null when
-     * screenshots are off in settings, or the capture failed (a protected app).
+     * outlined and tagged with its number, so what the model sees matches the list it acts by.
      */
-    private suspend fun look(screen: CompressedScreen): ByteArray? {
-        if (!screenshots || protectedApps[screen.packageName] == true) return null
+    private suspend fun markedScreenshot(screen: CompressedScreen): ByteArray? {
         val start = System.nanoTime()
         return device.markedScreenshot(marks(screen)).also { clock.shot(sinceMs(start)) }
     }
@@ -1011,25 +1052,63 @@ class ToolExecutor(
         }
     }
 
-    /**
-     * A protected app stays blocked for the run. Two-finger gestures request a fresh check before
-     * dispatch and on the resulting screen. Other tools use the usual per-app check.
-     */
-    private suspend fun isProtected(screen: CompressedScreen, taken: ByteArray? = null, tried: Boolean = false, recheck: Boolean = false): Boolean {
-        val pkg = screen.packageName ?: return false
-        val cached = protectedApps[pkg]
-        if (cached != null && (cached || !recheck)) return cached
-        // A capture just [taken] of this screen answers it; one that was [tried] and failed counts as the first try.
-        var shot = taken ?: if (tried) null else device.screenshot()
-        if (shot == null) {
-            delay(PROTECTED_RETRY_MS)
-            shot = device.screenshot()
+    private enum class Capture { PROBE, MARKED, PLAIN }
+
+    /** A past success cannot authorize a new view in the same app. Each published image doubles as its check. */
+    private suspend fun checkedScreen(
+        screen: CompressedScreen, capture: Capture, retryFor: String? = null,
+    ): Pair<CompressedScreen, ByteArray?> {
+        val pkg = screen.packageName
+        val read = lastRead
+        read?.captureSucceeded = false
+        if (protectedApps[pkg] == true) throw WithheldScreen(screen)
+        val image = when (capture) {
+            Capture.PROBE -> null
+            Capture.MARKED -> markedScreenshot(screen)
+            Capture.PLAIN -> device.screenshot()
         }
-        return (shot == null).also { protectedApps[pkg] = it }
+        val visible = if (capture == Capture.PROBE) device.canCaptureScreen() else image != null
+        if (visible) {
+            if (pkg != null) protectedApps[pkg] = false
+            if (read?.screen === screen) read.captureSucceeded = true
+            return screen to image
+        }
+        if (pkg == null) throw WithheldScreen(screen)
+        val previouslyVisible = protectedApps.remove(pkg) == false
+        if (retryFor != null) {
+            if (pkg == retryFor) protectedApps[pkg] = true
+            throw WithheldScreen(screen)
+        }
+        // Stop on the first failure in a previously visible app. A fresh read can recover or confirm the block.
+        if (previouslyVisible) throw WithheldScreen(screen)
+        delay(PROTECTED_RETRY_MS)
+        // Do not pair a successful retry with labels from a window whose capture failed.
+        return checkedScreen(readNow(), capture, retryFor = pkg)
     }
 
-    /** What the model sees of a protected app's screen: its name and why nothing more is shown. */
-    private fun protectedText(screen: CompressedScreen): String = "app: ${screen.packageName}\n$PROTECTED"
+    private suspend fun requireVisible(screen: CompressedScreen, freshCapture: Boolean = false): CompressedScreen {
+        val session = seenInterruptions ?: device.interruptions()
+        if (session != device.interruptions()) throw ScreenInterruptedException()
+        val read = lastRead
+        if (!freshCapture && read?.screen === screen && read.captureSucceeded) return screen
+        val (visible, _) = checkedScreen(screen, Capture.PROBE)
+        if (session != device.interruptions()) throw ScreenInterruptedException()
+        if (visible.packageName != screen.packageName) throw StaleTarget(visible)
+        return visible
+    }
+
+    /** Journals and later tool calls get the same redacted screen and recovery instructions as the model. */
+    private fun withheldResult(prefix: String, screen: CompressedScreen): ToolResult {
+        watch = null
+        lastRead = null
+        val notice = if (protectedApps[screen.packageName] == true) PROTECTED else CAPTURE_FAILED
+        val text = "app: ${screen.packageName}\n$notice"
+        val masked = CompressedScreen(
+            text, emptyMap(), emptyMap(), screen.packageName, emptyMap(),
+            screen.displayWidth, screen.displayHeight, screen.density, captureBlocked = true,
+        )
+        return ToolResult(prefix + text, masked, null, null)
+    }
 
     private fun error(reason: String) = ToolResult("ERROR: $reason", null, null, null)
 
@@ -1057,6 +1136,7 @@ class ToolExecutor(
         private const val MAX_MARKS = 120
 
         private const val PROTECTED_RETRY_MS = 400L
+        private const val CAPTURE_FAILED = "Screen capture failed. Call get_screen to check again before acting."
 
         /** In place of the screen of an app that blocks screen capture. */
         const val PROTECTED =
