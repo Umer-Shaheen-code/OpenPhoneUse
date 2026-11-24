@@ -35,6 +35,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 sealed interface AgentEvent {
     data object Thinking : AgentEvent
     data class Acting(val description: String) : AgentEvent
+
+    /** An app or link is being opened ([name] as it can be said aloud): voice mode answers at once. */
+    data class Opening(val name: String) : AgentEvent
     /**
      * The text of a turn that also made tool calls. That text has already been streamed as [TextDelta]s, so
      * consumers must not render both.
@@ -391,6 +394,7 @@ class AgentLoop(
                 val description = describe(call, current)
                 val tipDescription = if (Lang.korean) description else describe(call, current, korean = true)
                 if (call.name !in QUIET_TOOLS) emit(AgentEvent.Acting(description))
+                openingName(call)?.let { emit(AgentEvent.Opening(it)) }
 
                 val screenBefore = current
                 val before = current?.packageName
@@ -694,6 +698,14 @@ class AgentLoop(
             "batch" -> VERBS["batch"]?.second
             else -> description
         }
+    }
+
+    /** What open_app or open_uri is opening, as it can be said: the app's name, or a link's site ("youtube"). */
+    private fun openingName(call: InputItem.FunctionCall): String? {
+        if (call.name != "open_app" && call.name != "open_uri") return null
+        val args = runCatching { Json.parseToJsonElement(call.argumentsJson) as? JsonObject }.getOrNull() ?: return null
+        fun arg(key: String) = (args[key] as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+        return if (call.name == "open_app") arg("name") else arg("uri")?.let(com.phoneuse.voice.VoiceMode::siteName)
     }
 
     private fun describe(call: InputItem.FunctionCall, current: CompressedScreen?, korean: Boolean = Lang.korean): String {

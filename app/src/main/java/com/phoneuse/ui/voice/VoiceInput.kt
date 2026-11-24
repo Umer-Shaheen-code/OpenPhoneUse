@@ -26,8 +26,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.phoneuse.app.AppGraph
+import com.phoneuse.app.ReadAloud
 import com.phoneuse.app.voiceLanguageNow
 import com.phoneuse.i18n.tr
+import com.phoneuse.voice.Deepgram
 import com.phoneuse.voice.VoiceEngine
 import com.phoneuse.voice.VoiceError
 import com.phoneuse.voice.VoicePhase
@@ -144,13 +146,18 @@ fun rememberVoiceInput(
     }
     DisposableEffect(recognizer) { onDispose { pending[0]?.cancel(); pending[0] = null } }
     val listen = {
+        // A reply being read aloud would otherwise be heard by the mic and typed back in.
+        ReadAloud.stop()
         pending[0]?.cancel()
         pending[0] = scope.launch {
             val language = speechLanguageTag(AppGraph.voiceLanguageNow(), Locale.getDefault())
             pending[0] = null
             // A permission dialog or language read can outlive its input or its dock session.
             if (!latestCanStart()) return@launch
-            if (recognizer.engine == VoiceEngine.Dialog) {
+            val deepgramKey = Deepgram.key
+            if (!deepgramKey.isNullOrBlank()) {
+                recognizer.start(language, AppGraph.http, deepgramKey)
+            } else if (recognizer.engine == VoiceEngine.Dialog) {
                 try {
                     latestExternalUi(true)
                     dialog.launch(dialogIntent(language))
@@ -173,7 +180,7 @@ fun rememberVoiceInput(
     val begin = {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         // The system dialog records in its own app; only the in-app recognizer needs our microphone permission.
-        if (granted || recognizer.engine == VoiceEngine.Dialog) {
+        if (granted || (recognizer.engine == VoiceEngine.Dialog && !Deepgram.enabled)) {
             listen()
         } else {
             latestExternalUi(true)

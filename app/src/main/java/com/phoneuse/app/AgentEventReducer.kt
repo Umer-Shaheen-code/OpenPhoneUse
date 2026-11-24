@@ -15,6 +15,7 @@ fun withLine(state: AgentUiState, line: String): AgentUiState =
 fun reduce(state: AgentUiState, event: AgentEvent): AgentUiState = when (event) {
     AgentEvent.Thinking -> state.copy(phase = AgentPhase.THINKING)
     is AgentEvent.Acting -> withLine(state.copy(phase = AgentPhase.ACTING), event.description)
+    is AgentEvent.Opening -> state
     is AgentEvent.Log -> withLine(state, event.text)
     is AgentEvent.Usage -> state
     is AgentEvent.Card -> state

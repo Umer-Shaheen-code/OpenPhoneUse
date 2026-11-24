@@ -1,6 +1,8 @@
 package com.phoneuse.ui.chat
 
 import com.phoneuse.i18n.tr
+import android.content.Context
+import android.content.Intent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -43,6 +45,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import com.phoneuse.assist.AssistVoiceActivity
 import com.phoneuse.ui.theme.IconBtn
 import com.phoneuse.ui.theme.PlexSans
 import com.phoneuse.ui.theme.PuIcons
@@ -77,6 +81,7 @@ fun Composer(
     hasAttachments: Boolean = false,
 ) {
     val c = pu
+    val context = LocalContext.current
     val voice = key(conversationId) {
         rememberDraftVoiceInput(onAppendSpeech, enabled = showMic)
     }
@@ -141,7 +146,7 @@ fun Composer(
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         )
                     }
-                    if (showMic) IconBtn(PuIcons.Mic, tr("Voice input", "음성 입력"), onClick = voice::toggle, tint = c.textSub)
+                    if (showMic) IconBtn(PuIcons.Mic, tr("Voice mode", "음성 모드"), onClick = { openVoiceMode(context, conversationId) }, tint = c.textSub)
                     if (running && hasText) IconBtn(PuIcons.Send, tr("Send instruction", "지시 보내기"), onSend, tint = c.text, iconSize = 20.dp)
                     if (running) StopCircle(onStop) else SendCircle(onSend, enabled = hasText || hasAttachments)
                 }
@@ -170,4 +175,13 @@ private fun AttachButton(open: Boolean, onClick: () -> Unit) {
             modifier = Modifier.size(if (open) 18.dp else 20.dp),
         )
     }
+}
+
+/** The chat's mic opens voice mode (the assistant's voice sheet): the spoken command runs here and is answered aloud. */
+private fun openVoiceMode(context: Context, conversationId: Long?) {
+    context.startActivity(
+        Intent(context, AssistVoiceActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            .putExtra(AssistVoiceActivity.EXTRA_CONVERSATION, conversationId ?: -1L),
+    )
 }

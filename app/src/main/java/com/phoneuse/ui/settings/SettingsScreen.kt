@@ -98,6 +98,7 @@ import com.phoneuse.ui.theme.PuRadio
 import com.phoneuse.ui.theme.PuSwitch
 import com.phoneuse.ui.theme.Segmented
 import com.phoneuse.ui.theme.pu
+import com.phoneuse.voice.Deepgram
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -323,6 +324,7 @@ fun SettingsScreen(
                 ValueRow(tr("On the unfolded screen", "펼친 화면에서"), label(UNFOLDED_LABELS, unfolded), onClick = { choice = Choice.UNFOLDED })
                 ValueRow(tr("Speak by voice", "음성으로 말하기"), label(VOICE_LABELS, voice), onClick = { choice = Choice.VOICE })
                 SwitchRow(tr("Read answers aloud", "답 소리 내어 읽기"), tr("Reads the answer when a task finishes", "작업이 끝나면 답을 읽어 줘요"), readAloud) { v -> scope.launch { settings.setReadAloud(v) } }
+                DeepgramKeyRow(settings, scope)
             }
 
             Section(tr("Privacy", "개인정보"))
@@ -952,6 +954,40 @@ private fun CompatibleServerFields(settings: SettingsStore, account: AccountInfo
             tr("Next, choose a model from the model menu on the chat screen.", "이제 대화 화면의 모델 메뉴에서 모델을 골라 주세요."),
             fontSize = 12.5.sp, lineHeight = 18.sp, color = c.textSub,
         )
+    }
+}
+
+/** The Deepgram key: voice input and voice mode's spoken replies use Deepgram once it is saved. */
+@Composable
+private fun DeepgramKeyRow(settings: SettingsStore, scope: CoroutineScope) {
+    val c = pu
+    var keyText by rememberSaveable { mutableStateOf("") }
+    var saved by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        // Off the main thread: reading it decrypts with the Keystore.
+        keyText = runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { settings.readSecret(Deepgram.SECRET) } }.getOrNull().orEmpty()
+    }
+    RowDivider(false)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column {
+            Text(tr("Deepgram voice", "Deepgram 음성"), fontSize = 15.sp, color = c.text)
+            Text(
+                tr(
+                    "With a key, the mic uses Deepgram, and a command spoken from the side button is answered aloud in English, then the mic listens again",
+                    "키를 넣으면 마이크가 Deepgram을 쓰고, 측면 버튼으로 말한 명령에 영어로 소리 내어 답한 뒤 다시 들어요",
+                ),
+                fontSize = 12.5.sp, color = c.textSub,
+            )
+        }
+        CompatibleField(keyText, { keyText = it; saved = false }, tr("Deepgram API key", "Deepgram API 키"), secret = true)
+        PuButton(if (saved) tr("Saved", "저장됨") else tr("Save", "저장"), {
+            scope.launch {
+                val v = keyText.trim().ifEmpty { null }
+                settings.writeSecret(Deepgram.SECRET, v)
+                Deepgram.key = v
+                saved = true
+            }
+        }, Modifier.fillMaxWidth(), height = 44.dp, radius = 12.dp, fontSize = 14)
     }
 }
 

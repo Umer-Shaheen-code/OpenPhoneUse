@@ -4,6 +4,7 @@ import android.content.Context
 import com.phoneuse.chat.ChatRepository
 import com.phoneuse.chat.Retention
 import com.phoneuse.service.SettleSpeed
+import com.phoneuse.voice.Deepgram
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
@@ -73,6 +74,7 @@ object AppGraph {
         settings = SettingsStore(app)
         // Runs at every start and does nothing once they are gone; a failure just tries again next start.
         scope.launch { runCatching { settings.dropRetiredSecrets() } }
+        scope.launch { Deepgram.key = runCatching { settings.readSecret(Deepgram.SECRET) }.getOrNull() }
         scope.launch { runCatching { settings.dropRetiredPrefs() } }
         // A failed read falls back to the system theme, and so does a read that takes too long: the activity holds
         // its first frame until this is known, so it must never stay null.

@@ -6,6 +6,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.content.Intent
 import android.util.Log
 import android.widget.Toast
 import com.phoneuse.agent.AgentEvent
@@ -50,8 +51,11 @@ import com.phoneuse.phone.RunTrigger
 import com.phoneuse.model.ModelOptions
 import com.phoneuse.model.OpenAiResponsesClient
 import com.phoneuse.service.PhoneUseAccessibilityService
+import com.phoneuse.assist.AssistVoiceActivity
+import com.phoneuse.voice.VoiceMode
 import com.phoneuse.ui.MainActivity
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -77,6 +81,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
@@ -311,6 +316,28 @@ class AgentRunner(
         job?.cancel()
     }
 
+    /** Voice mode: say "Opening X" as the app opens, instead of after the model's next look at the screen. */
+    private fun voiceAck(st: RunState, name: String) {
+        if (!st.voice) return
+        ReadAloud.speakAck(context, "Opening $name.")
+        st.ackedAt = st.acts
+    }
+
+    /** Voice mode: the reply has been spoken, so open the voice sheet for the next command in this conversation. */
+    private fun listenAgain(conversation: Long) {
+        // The accessibility service may start activities from the background; the app context alone may not.
+        val host = PhoneUseAccessibilityService.instance ?: context
+        try {
+            host.startActivity(
+                Intent(host, AssistVoiceActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                    .putExtra(AssistVoiceActivity.EXTRA_CONVERSATION, conversation),
+            )
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "voice mode could not listen again", e)
+        }
+    }
+
     /** Stops the run and waits until it has ended: its reply, memories and tips are written (or dropped) by then. */
     suspend fun stopAndWait() {
         job?.cancelAndJoin()
@@ -339,6 +366,7 @@ class AgentRunner(
         // while this cleanup sat at the end of the very large body, so nothing was saved, the chat never came
         // back and the running-task notification stayed.
         val st = RunState()
+        st.voice = source == Source.ASSIST && VoiceMode.take()
         try {
             runBody(st, conversationId, text, source, overlay, attachments, routine, suggested)
         } finally {
@@ -351,7 +379,8 @@ class AgentRunner(
                         overlay, st.progress, st.conversation, st.reply, st.sources, st.searchCount(),
                         st.usedMemories, st.remembered.toList(), st.forgotten.toList(), st.runSteps.toList(), st.runCards.toList(),
                         st.runExecutor?.thirdPartySeen == true, st.cancelled, source, st.learned, st.tipsOn, st.modelCalls.get(),
-                        st.deviceUsed, st.stayInApp, st.outcome, st.runTitle, routine, st.serviceLost.get(), st.failureCode,
+                        st.deviceUsed, st.stayInApp, st.outcome, st.runTitle, routine, st.serviceLost.get(), st.failureCode, st.voice,
+                        st.voice && st.ackedAt == st.acts,
                     ),
                     runJob,
                 )
@@ -548,7 +577,7 @@ class AgentRunner(
             )
             steps = st.runSteps
             steering = queue
-            loop.run(history, message.text, observeFirst = source == Source.ASSIST, images = message.images, attached = attachments.isNotEmpty(), note = memoryNote).collect { event ->
+            loop.run(history, message.text, observeFirst = source == Source.ASSIST, images = message.images, attached = attachments.isNotEmpty(), note = AgentPrompt.withVoice(memoryNote, st.voice)).collect { event ->
                 when (event) {
                     AgentEvent.Thinking -> {
                         st.modelCalls.incrementAndGet()
@@ -572,7 +601,11 @@ class AgentRunner(
                         st.deviceUsed = true
                         if (!engage()) throw NoServiceException()
                     }
-                    is AgentEvent.Acting -> publishStep(st.runSteps, event.description)
+                    is AgentEvent.Acting -> {
+                        publishStep(st.runSteps, event.description)
+                        st.acts++
+                    }
+                    is AgentEvent.Opening -> voiceAck(st, event.name)
                     // This text was also streamed as deltas; it is kept once, as a step.
                     is AgentEvent.Log -> publishStep(st.runSteps, event.text)
                     is AgentEvent.Card -> st.runCards += event.card
@@ -697,6 +730,11 @@ class AgentRunner(
         @Volatile var runExecutor: ToolExecutor? = null
         val flaggedThirdParty = AtomicBoolean(false)
         @Volatile var tipsOn = false
+        // A command spoken in voice mode: English spoken reply, then the mic opens again.
+        @Volatile var voice = false
+        // Steps shown so far, and how many there were when voice mode said "Opening X" (-1: not said).
+        @Volatile var acts = 0
+        @Volatile var ackedAt = -1
     }
 
     /** What a run leaves for [endRun]; kept out of run() itself, whose size already trips the verifier on device. */
@@ -725,6 +763,9 @@ class AgentRunner(
         val routine: RoutineRun?,
         val serviceLost: Boolean,
         val failureCode: String?,
+        val voice: Boolean,
+        // Voice mode already said "Opening X" and nothing was done after it: the summary would only repeat it.
+        val voiceAcked: Boolean,
     )
 
     /** The end of a run: touches back, the reply stored, usage and tips recorded, and the user told. */
@@ -787,11 +828,28 @@ class AgentRunner(
         // A run from the chat that operated another app brings the chat back, showing the reply.
         val usedDevice = e.deviceUsed && !uiVisible.value
         val shouldReturn = ReturnPolicy.shouldReturn(e.source, usedDevice, e.stayInApp, e.outcome)
+        // Voice mode: ask for the spoken reply now and keep the dock up until it plays. Once the dock hides the app is in
+        // the background, where some phones (TECNO) cut its network and the reply never arrived.
+        var voiceStarted: CompletableDeferred<Unit>? = null
+        if (e.voice && id != null && answer != null && !e.cancelled) {
+            val started = CompletableDeferred<Unit>()
+            voiceStarted = started
+            if (e.voiceAcked) {
+                started.complete(Unit)
+                ReadAloud.whenAckDone { listenAgain(id) }
+            } else {
+                guarded("read aloud") { ReadAloud.speakThen(context, answer, onPlaying = { started.complete(Unit) }) { listenAgain(id) } }
+                e.overlay.releaseTouches()
+                withTimeoutOrNull(VOICE_LINGER_MAX_MS) { started.await() }
+            }
+        }
         // Finish any open dictation before bringing another activity forward or reading the reply aloud.
-        val last = e.overlay.release(if (e.cancelled || shouldReturn) 0 else RESULT_LINGER_MS, runJob)
-        if (id != null && answer != null && !e.cancelled && e.source != Source.ROUTINE) {
+        val last = e.overlay.release(if (voiceStarted != null || e.cancelled || shouldReturn) 0 else RESULT_LINGER_MS, runJob)
+        if (voiceStarted == null && id != null && answer != null && !e.cancelled && e.source != Source.ROUTINE) {
             guarded("read aloud") {
-                if (settings.readAloud.first()) ReadAloud.speak(context, answer, settings.voiceLanguage.first().tag)
+                if (settings.readAloud.first()) {
+                    ReadAloud.speak(context, answer, settings.voiceLanguage.first().tag)
+                }
             }
         }
         var returned = false
@@ -961,6 +1019,8 @@ class AgentRunner(
         const val PROGRESS_FIRST_MS = 2_500L
         const val PROGRESS_EVERY_MS = 1_000L
         const val RESULT_LINGER_MS = 2000L
+        /** Voice mode keeps the dock up at most this long waiting for the spoken reply to start. */
+        const val VOICE_LINGER_MAX_MS = 8000L
         const val TITLE_CHARS = 30
         const val TIPS_PER_APP = 3
         val SERVICE_LOST: String get() = tr("Accessibility service was turned off", "접근성 서비스가 꺼졌어요")

@@ -194,6 +194,10 @@ object AgentPrompt {
         }
     }
 
+    /** [note] plus voice mode's reply rule when the command was spoken ([voice]). */
+    fun withVoice(note: String?, voice: Boolean): String? =
+        if (!voice) note else listOfNotNull(note, com.phoneuse.voice.VoiceMode.NOTE).joinToString("\n\n")
+
     /**
      * The "기억" block of [memories] (already chosen and budgeted by [MemoryRanker.top]), sent as a developer
      * message just before the user's message; null when memory is off or nothing matched.

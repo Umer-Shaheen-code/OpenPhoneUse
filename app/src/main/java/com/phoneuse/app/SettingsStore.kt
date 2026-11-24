@@ -46,7 +46,7 @@ enum class UnfoldedLayout { SIDE_BY_SIDE, CHAT_ONLY }
 enum class ScreenContent { ALL, TEXT_ONLY }
 
 /** Settings "음성으로 말하기": the speech recognizer's language; [tag] null = the system's. */
-enum class VoiceLanguage(val tag: String?) { KOREAN("ko-KR"), ENGLISH("en-US"), SYSTEM(null) }
+enum class VoiceLanguage(val tag: String?) { KOREAN("ko-KR"), ENGLISH("en-US"), URDU("ur-PK"), HINDI("hi-IN"), SYSTEM(null) }
 
 /**
  * Settings "방해하지 않는 시간": minutes of the day; the span may cross midnight (23:00–07:00).

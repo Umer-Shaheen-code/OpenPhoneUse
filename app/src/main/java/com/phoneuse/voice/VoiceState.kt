@@ -28,7 +28,7 @@ enum class VoicePhase {
 
 /** Why listening ended without text, grouped the way the inline message words it. */
 enum class VoiceError {
-    NO_MATCH, NETWORK, BUSY, PERMISSION, LANGUAGE, AUDIO, UNAVAILABLE;
+    NO_MATCH, NETWORK, BUSY, PERMISSION, LANGUAGE, AUDIO, UNAVAILABLE, KEY;
 
     /** The one-line inline message. */
     val message: String
@@ -40,6 +40,7 @@ enum class VoiceError {
             LANGUAGE -> tr("This language isn't available for voice input", "이 언어는 음성 인식을 쓸 수 없어요")
             AUDIO -> tr("Couldn't use the microphone", "마이크를 쓸 수 없어요")
             UNAVAILABLE -> tr("Voice input isn't available on this device", "이 기기에서 음성 입력을 쓸 수 없어요")
+            KEY -> tr("Deepgram didn't accept the API key. Check it in Settings", "Deepgram이 API 키를 받지 않았어요. 설정에서 확인해 주세요")
         }
 }
 

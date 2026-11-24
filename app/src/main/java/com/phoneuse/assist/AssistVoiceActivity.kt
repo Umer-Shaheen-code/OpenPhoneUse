@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.phoneuse.app.AppGraph
+import com.phoneuse.voice.VoiceMode
 import com.phoneuse.app.FontSize
 import com.phoneuse.app.ThemeMode
 import com.phoneuse.ui.theme.PhoneUseTheme
@@ -94,9 +95,13 @@ class AssistVoiceActivity : ComponentActivity() {
         finish()
         if (id != null) {
             VoiceBridge.deliver(id, text)
-        } else if (!text.isNullOrBlank()) {
+        } else if (text.isNullOrBlank()) {
+            VoiceMode.end()
+        } else {
+            VoiceMode.spoke()
             val result = AssistSession.sender.submit(text, conversation) {}
             // No sheet to keep open here: say why and keep the words visible.
+            if (result !is SubmitResult.Sent) VoiceMode.end()
             if (result is SubmitResult.Blocked) {
                 Toast.makeText(applicationContext, "${result.reason}: $text", Toast.LENGTH_LONG).show()
             }

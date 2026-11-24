@@ -111,6 +111,8 @@ class VoiceStateTest {
     @Test fun languageFollowsTheVoiceSettingThenTheDevice() {
         assertEquals("ko-KR", speechLanguageTag(VoiceLanguage.KOREAN, Locale.US))
         assertEquals("en-US", speechLanguageTag(VoiceLanguage.ENGLISH, Locale.KOREA))
+        assertEquals("ur-PK", speechLanguageTag(VoiceLanguage.URDU, Locale.US))
+        assertEquals("hi-IN", speechLanguageTag(VoiceLanguage.HINDI, Locale.US))
         assertEquals("ja-JP", speechLanguageTag(VoiceLanguage.SYSTEM, Locale.JAPAN))
     }
 
