@@ -13,8 +13,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
 
 /**
- * "소리 내어 읽기": replies read with the system text-to-speech, one at a time (a new one replaces the last).
- * The engine starts on first use; text asked for before it is ready is spoken once it is.
+ * "소리 내어 읽기": replies read one at a time (a new one replaces the last), in Deepgram's Flux voice for the language
+ * when a key is set and it has one, else (or when Deepgram fails) with the system text-to-speech. The system engine
+ * starts on first use; text asked for before it is ready is spoken once it is.
  */
 object ReadAloud {
     private const val TAG = "ReadAloud"
@@ -43,6 +44,40 @@ object ReadAloud {
     /** Reads [text] (Markdown marks dropped) in [language] (a BCP-47 tag; null = the device language). */
     @Synchronized
     fun speak(context: Context, text: String, language: String? = null) {
+        if (!viaDeepgram(context, text, language, {}, null)) system(context, text, language)
+    }
+
+    /**
+     * Starts [text] in Deepgram's voice for [language]; false (nothing started) without a key, a voice for that
+     * language or any text. A Deepgram failure falls back to the system voice, then [onDone] as after it.
+     */
+    private fun viaDeepgram(context: Context, text: String, language: String?, onPlaying: () -> Unit, onDone: (() -> Unit)?): Boolean {
+        val key = Deepgram.key
+        val plain = plain(text)
+        val model = Deepgram.ttsModel(language ?: Locale.getDefault().toLanguageTag())
+        if (key.isNullOrBlank() || model == null || plain.isBlank()) return false
+        // Any system-voice reading in progress gives way.
+        after = null
+        pending = null
+        tts?.stop()
+        _speaking.value = true
+        Deepgram.speak(AppGraph.http, key, plain, model, onPlaying) { ok ->
+            if (ok) {
+                _speaking.value = false
+                onDone?.invoke()
+            } else {
+                onPlaying()
+                synchronized(this) {
+                    system(context, text, language)
+                    after = onDone
+                }
+            }
+        }
+        return true
+    }
+
+    /** [text] with the system text-to-speech. */
+    private fun system(context: Context, text: String, language: String?) {
         after = null
         Deepgram.stopSpeaking()
         val plain = plain(text)
@@ -62,37 +97,15 @@ object ReadAloud {
     }
 
     /**
-     * Voice mode: reads [text] in Deepgram's English voice when a key is saved (the system voice otherwise, or when
-     * Deepgram fails), then calls [onDone] on the main thread. [onPlaying] fires once sound starts or the system voice
-     * takes over. A [stop] meanwhile drops [onDone].
+     * Voice mode: reads [text] in [language] like [speak], then calls [onDone] on the main thread. [onPlaying] fires
+     * once sound starts or the system voice takes over. A [stop] meanwhile drops [onDone].
      */
     @Synchronized
-    fun speakThen(context: Context, text: String, onPlaying: () -> Unit = {}, onDone: () -> Unit) {
-        val key = Deepgram.key
-        val plain = plain(text)
-        if (key.isNullOrBlank() || plain.isBlank()) {
-            onPlaying()
-            speak(context, text, "en-US")
-            if (plain.isBlank()) main.post { onDone() } else after = onDone
-            return
-        }
-        // Any system-voice reading in progress gives way.
-        after = null
-        pending = null
-        tts?.stop()
-        _speaking.value = true
-        Deepgram.speak(AppGraph.http, key, plain, onPlaying) { ok ->
-            if (ok) {
-                _speaking.value = false
-                onDone()
-            } else {
-                onPlaying()
-                synchronized(this) {
-                    speak(context, text, "en-US")
-                    after = onDone
-                }
-            }
-        }
+    fun speakThen(context: Context, text: String, language: String?, onPlaying: () -> Unit = {}, onDone: () -> Unit) {
+        if (viaDeepgram(context, text, language, onPlaying, onDone)) return
+        onPlaying()
+        system(context, text, language)
+        if (plain(text).isBlank()) main.post { onDone() } else after = onDone
     }
 
     /** Voice mode's "Opening X" is being said; [afterAck] runs once it ends. */
@@ -104,7 +117,8 @@ object ReadAloud {
     fun speakAck(context: Context, text: String) {
         ackPending = true
         afterAck = null
-        speakThen(context, text) { ackFinished() }
+        // The line itself is English ("Opening X."), so an English voice says it.
+        speakThen(context, text, "en-US") { ackFinished() }
     }
 
     /** Runs [next] on the main thread once the last [speakAck] has been said (at once when it has, or was stopped). */

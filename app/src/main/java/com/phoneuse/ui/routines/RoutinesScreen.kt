@@ -347,7 +347,7 @@ private fun TemplateRow(t: RoutineTemplate, onClick: () -> Unit) {
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(t.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.text)
             Text(t.description, fontSize = 12.5.sp, color = c.textSub, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }

@@ -122,6 +122,14 @@ class VoiceRecognizer(
             override fun onError(error: VoiceError) = current {
                 deepgram = null
                 val heard = _state.value.partial
+                // Deepgram down, key refused or language unsupported before a word was heard: Android's own
+                // recognizer takes over (a mic problem or silence would fail there too). The dialog engine can't
+                // start from here, so it keeps the error.
+                if (heard.isBlank() && error in DEEPGRAM_FALLBACK && engine != VoiceEngine.Dialog) {
+                    Log.w(TAG, "Deepgram failed ($error); listening with Android's recognizer")
+                    this@VoiceRecognizer.start(languageTag)
+                    return@current
+                }
                 session++
                 main.removeCallbacksAndMessages(null)
                 emit(VoiceEvent.Failed(error))
@@ -282,6 +290,9 @@ class VoiceRecognizer(
         private const val TAG = "VoiceRecognizer"
         private const val AUDIO_REPORT_INTERVAL_MS = 10_000L
         private const val SILENCE_MS = 2_000L
+
+        /** Deepgram failures that Android's recognizer may not share (see startDeepgram's onError). */
+        private val DEEPGRAM_FALLBACK = setOf(VoiceError.NETWORK, VoiceError.KEY, VoiceError.LANGUAGE, VoiceError.UNAVAILABLE)
 
         /** How long to wait after speech ends before using the latest partial. */
         const val FINAL_WAIT_MS = 4_000L

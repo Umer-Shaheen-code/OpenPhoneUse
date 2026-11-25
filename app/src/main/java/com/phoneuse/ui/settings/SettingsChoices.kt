@@ -2,6 +2,7 @@ package com.phoneuse.ui.settings
 
 import com.phoneuse.i18n.tr
 import com.phoneuse.app.AssistAction
+import com.phoneuse.app.ConfirmMode
 import com.phoneuse.app.ControlSpeed
 import com.phoneuse.app.FontSize
 import com.phoneuse.app.QuietHours
@@ -10,9 +11,14 @@ import com.phoneuse.app.UnfoldedLayout
 import com.phoneuse.app.VoiceLanguage
 
 /** The settings that open a choice dialog. */
-enum class Choice { RETENTION, ASSIST, SPEED, SUMMARY, QUIET, FONT, UNFOLDED, VOICE, SCREEN }
+enum class Choice { RETENTION, CONFIRM, ASSIST, SPEED, SUMMARY, QUIET, FONT, UNFOLDED, VOICE, SCREEN }
 
 val RETENTION_LABELS get() = listOf(30 to tr("30 days", "30일"), 90 to tr("90 days", "90일"), 365 to tr("1 year", "1년"), 0 to tr("Forever", "무기한"))
+val CONFIRM_LABELS get() = listOf(
+    ConfirmMode.CAREFUL to tr("Careful", "신중하게"),
+    ConfirmMode.BALANCED to tr("Balanced", "균형 있게"),
+    ConfirmMode.AUTOPILOT to tr("Autopilot", "자동 조종"),
+)
 val ASSIST_LABELS get() = listOf(AssistAction.SUGGEST to tr("Ideas for this screen", "이 화면으로 할 일"), AssistAction.TYPE to tr("Talk right away", "바로 말하기"))
 val SPEED_LABELS get() = listOf(ControlSpeed.FAST to tr("Fast", "빠르게"), ControlSpeed.NORMAL to tr("Normal", "보통"), ControlSpeed.SLOW to tr("Slow", "천천히"))
 val FONT_LABELS get() = listOf(FontSize.DEFAULT to tr("Default", "기본"), FontSize.LARGE to tr("Large", "크게"), FontSize.LARGEST to tr("Largest", "아주 크게"))

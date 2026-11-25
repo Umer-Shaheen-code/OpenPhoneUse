@@ -21,17 +21,22 @@ object ConfirmPolicy {
  *
  * A SEND is skipped only for a call that claimed user_authorized ([claimed], see [forClaim]): the user's own message
  * fixed the recipient and the content. A send whose content the model wrote always asks, switch or not.
+ *
+ * [skipSends] (Settings "확인 모드" BALANCED and AUTOPILOT): SEND and CHANGE pass without a card, claimed or not,
+ * taint or not; MONEY, SECURITY and DELETE still go through the rules above.
  */
 class ConfirmPolicyGate(
     private val inner: UserGate,
     private val claimed: Boolean = false,
+    private val skipSends: Boolean = false,
     private val confirmSend: () -> Boolean,
 ) : UserGate {
     /** This gate for one call: [userAuthorized] is whether that call claimed user_authorized. */
     fun forClaim(userAuthorized: Boolean): ConfirmPolicyGate =
-        if (userAuthorized == claimed) this else ConfirmPolicyGate(inner, userAuthorized, confirmSend)
+        if (userAuthorized == claimed) this else ConfirmPolicyGate(inner, userAuthorized, skipSends, confirmSend)
 
     override suspend fun confirm(category: RiskCategory, summary: String): Boolean = when {
+        skipSends && category in ConfirmPolicy.SWITCHABLE -> true
         category == RiskCategory.SEND && !claimed -> inner.confirm(category, summary)
         ConfirmPolicy.asks(category, confirmSend()) -> inner.confirm(category, summary)
         else -> true

@@ -112,6 +112,7 @@ fun ChatScreen(
     layout: ChatPaneLayout = ChatPaneLayout.NORMAL,
     /** Board Digest, from the home notification tile. */
     onOpenDigest: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     /** Scroll position and attach sheet; held by the caller so they survive flex mode, where no chat is drawn. */
     paneState: ChatPaneState = remember { ChatPaneState() },
 ) {
@@ -237,6 +238,7 @@ fun ChatScreen(
                     memoryTexts = memoryTexts,
                     onRestoreMemory = onRestoreMemory,
                     onOpenMemory = onOpenMemory,
+                    onOpenSettings = onOpenSettings,
                     paneCardKey = if (layout == ChatPaneLayout.BESIDE_RESULT) FoldLayoutPolicy.resultCard(messages)?.key else null,
                     // A card button that needs the agent sends its text as the next message here.
                     onCardPrompt = { text ->

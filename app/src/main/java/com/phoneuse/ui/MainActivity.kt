@@ -605,6 +605,7 @@ private fun AppRoot(
                 layout = layout,
                 paneState = chatPaneState,
                 onOpenDigest = { openDigest(Screen.CHAT) },
+                onOpenSettings = { screen = Screen.SETTINGS },
             )
         }
     }

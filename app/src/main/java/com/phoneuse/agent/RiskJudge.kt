@@ -74,9 +74,10 @@ object RiskJudge {
         "effect" to prop("string", "With risk: what will happen, in the user's language, with the amount, recipient or item shown, e.g. \"홍길동에게 10,000원 송금\"."),
         "delete_scope" to enumProp(
             "With risk=delete. requested_one: exactly the single item the user's own message asks to delete, and it " +
-                "can be undone. bulk: many items, everything, or more than the user named (also each step of deleting " +
-                "all). permanent: cannot be undone (permanent delete, empty trash, uninstall, reset, a whole history or album).",
-            listOf("requested_one", "bulk", "permanent"),
+                "can be undone. one: a single item the user did not name, and it can be undone. bulk: many items, " +
+                "everything, or more than the user named (also each step of deleting all). permanent: cannot be undone " +
+                "(permanent delete, empty trash, uninstall, reset, a whole history or album).",
+            listOf("requested_one", "one", "bulk", "permanent"),
         ),
     )
 

@@ -76,6 +76,22 @@ class ToolExecutor(
      * DELETE asks unless the user asked for that deletion ([deleteSkips]).
      */
     confirmSend: Boolean = true,
+    /**
+     * Settings "확인 모드" BALANCED and AUTOPILOT: SEND and CHANGE never ask, send_sms included (see
+     * [ConfirmPolicyGate]); MONEY, SECURITY and DELETE ask as before. The runner never sets it for a routine.
+     */
+    skipSends: Boolean = false,
+    /**
+     * Settings "확인 모드" AUTOPILOT: a DELETE on screen asks only when it is bulk or permanent (see [deleteSkips]),
+     * whether or not the user named it. The runner never sets it for a routine.
+     */
+    private val autopilot: Boolean = false,
+    /**
+     * Settings "확인 모드" CAREFUL: every SEND and CHANGE asks, even one the user's own words fixed (user_authorized,
+     * a dictated text, a call, alarm or timer they asked for). The runner never sets it for a routine, whose saved
+     * message still goes by its [fixedSend] match.
+     */
+    private val careful: Boolean = false,
     /** Settings "모델에 보내는 화면 내용: 글자만": false keeps screenshots out of the run (the screen tree still goes). */
     private val screenshots: Boolean = true,
     /**
@@ -99,7 +115,7 @@ class ToolExecutor(
      * and this run has not read third-party text so far (a screen, a notification, a mail). A routine run ignores the
      * switch (its only skip is its own [fixedSend] match; the runner also passes confirmSend for every routine).
      */
-    private val confirming: UserGate = ConfirmPolicyGate(gate) {
+    private val confirming: UserGate = ConfirmPolicyGate(gate, skipSends = skipSends) {
         confirmSend || !trustUserAuthorized || historyTainted || runThirdParty || fixedSend != null
     }
     /** Third-party text entered this run itself (history aside). */
@@ -198,10 +214,11 @@ class ToolExecutor(
      * A DELETE that may go without a card: the user asked for a deletion ([userAskedDelete]) and the model declares
      * this one is what they named, a single item (or exactly those named) and recoverable, and no permanent or bulk
      * word ([RiskGuard.irreversible]) is on the control or its dialog. No judgment (off, slow, failed): the card.
+     * [autopilot] drops the "the user asked for it" half: any single recoverable delete goes without a card.
      */
     private fun deleteSkips(judgment: RiskJudge.Judgment?, vararg texts: String?): Boolean =
-        judgment != null && judgment.category == RiskCategory.DELETE && judgment.requested && !judgment.bulk &&
-            !judgment.irreversible && userAskedDelete() && !userAskedBulkDelete() &&
+        judgment != null && judgment.category == RiskCategory.DELETE && !judgment.bulk && !judgment.irreversible &&
+            (autopilot || (judgment.requested && userAskedDelete())) && !userAskedBulkDelete() &&
             !RiskGuard.irreversible(*texts, judgment.effect)
 
     /**
@@ -220,10 +237,13 @@ class ToolExecutor(
     /** This run's tool modules, from [ToolRegistry] unless a test passes its own list. */
     private val modules: List<ToolModule> = registry(
         ToolDeps(
-            device, gate, confirming, files, memory, phone, messaging, routines, connectors,
+            // Balanced and Autopilot: send_sms and the other raw-gate confirmations go through the policy too.
+            device, if (skipSends) confirming else gate, confirming, files, memory, phone, messaging, routines, connectors,
             runTainted = { runThirdParty }, historyTainted = historyTainted, screen = ScreenModule(), context = appContext,
-            userFixedSend = ::userFixedSend, userAskedDelete = ::userAskedDelete,
-            userAskedCall = ::userAskedCall, userAskedAlarm = ::userAskedAlarm, userAskedTimer = ::userAskedTimer,
+            // Careful: nothing the user said skips a send or change card.
+            userFixedSend = { to, body -> !careful && userFixedSend(to, body) }, userAskedDelete = ::userAskedDelete,
+            userAskedCall = { names, number -> !careful && userAskedCall(names, number) },
+            userAskedAlarm = { !careful && userAskedAlarm() }, userAskedTimer = { !careful && userAskedTimer() },
             userGaveContact = ::userGaveContact,
         ),
     )
@@ -565,7 +585,7 @@ class ToolExecutor(
      * (for a type_text with submit, [typed] about to go into [typedInto]); nothing typed earlier in the run counts.
      */
     private fun userAuthorized(args: JsonObject, screen: CompressedScreen? = null, typedInto: Int? = null, typed: String? = null): Boolean {
-        if (args.bool("user_authorized") != true || !trustUserAuthorized || historyTainted || helperCall) return false
+        if (careful || args.bool("user_authorized") != true || !trustUserAuthorized || historyTainted || helperCall) return false
         fixedSend?.let { fixed -> return screen != null && fixed.matches(screen, typedInto, typed) }
         if (!runThirdParty) return true
         // Text the user did not write (a chat bubble, a page, a notification) may have asked for this send. The claim

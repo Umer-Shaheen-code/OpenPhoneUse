@@ -46,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.graphics.Color
 import com.phoneuse.app.AssistAction
+import com.phoneuse.app.ConfirmMode
 import com.phoneuse.app.ControlSpeed
 import com.phoneuse.app.FontSize
 import com.phoneuse.app.QuietHours
@@ -191,7 +192,7 @@ fun SettingsScreen(
     var shorten by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     val modelAuto by settings.modelAuto.collectAsState(true)
     val retention by settings.retentionDays.collectAsState(0)
-    val confirmSend by settings.confirmSend.collectAsState(true)
+    val confirmMode by settings.confirmMode.collectAsState(ConfirmMode.CAREFUL)
     val riskJudge by settings.riskJudge.collectAsState(true)
     val understand by settings.understandNotifications.collectAsState(true)
     val assistAction by settings.assistAction.collectAsState(AssistAction.SUGGEST)
@@ -295,11 +296,7 @@ fun SettingsScreen(
                 LockRow(tr("Confirm before payments and transfers", "결제 · 송금 전 확인"), first = true)
                 LockRow(tr("You enter passwords yourself", "비밀번호 입력은 직접"))
                 LockRow(tr("Confirm before deleting", "삭제 전 확인"))
-                SwitchRow(
-                    tr("Confirm before sending messages", "메시지 보내기 전 확인"),
-                    tr("Asks before sending messages or mail, calling, posting, or changing alarms and wallpaper. A call, alarm or timer you asked for yourself, or a text you dictated word for word, goes ahead without asking. Off: still confirms in tasks that read SMS or outside content", "메시지·메일·전화·게시, 알람·배경화면을 바꾸기 전에 물어봐요. 직접 요청한 전화·알람·타이머와 내용까지 그대로 불러 준 문자는 묻지 않고 진행해요. 꺼도 문자(SMS)나 외부 내용을 읽은 작업에서는 확인해요"),
-                    confirmSend,
-                ) { v -> scope.launch { settings.setConfirmSend(v) } }
+                ValueRow(tr("Confirm mode", "확인 모드"), label(CONFIRM_LABELS, confirmMode), onClick = { choice = Choice.CONFIRM })
                 SwitchRow(
                     tr("AI safety check", "AI 안전 검사"),
                     tr("The AI judges from the screen whether a step pays, sends or deletes, and asks you then. Off: keyword checks only", "AI가 조작하면서 화면을 보고 결제·전송·삭제인지 직접 판단해 그때 확인을 받아요. 끄면 키워드 검사만 해요"),
@@ -324,7 +321,8 @@ fun SettingsScreen(
                 ValueRow(tr("On the unfolded screen", "펼친 화면에서"), label(UNFOLDED_LABELS, unfolded), onClick = { choice = Choice.UNFOLDED })
                 ValueRow(tr("Speak by voice", "음성으로 말하기"), label(VOICE_LABELS, voice), onClick = { choice = Choice.VOICE })
                 SwitchRow(tr("Read answers aloud", "답 소리 내어 읽기"), tr("Reads the answer when a task finishes", "작업이 끝나면 답을 읽어 줘요"), readAloud) { v -> scope.launch { settings.setReadAloud(v) } }
-                DeepgramKeyRow(settings, scope)
+                // A key built into the app stays out of sight: users only add their AI key.
+                if (!Deepgram.builtIn) DeepgramKeyRow(settings, scope)
             }
 
             Section(tr("Privacy", "개인정보"))
@@ -431,6 +429,13 @@ fun SettingsScreen(
                     if (count > 0) shorten = v to count else settings.setRetentionDays(v)
                 }
             }
+            Choice.CONFIRM -> ChoiceDialog(
+                tr("Confirm mode", "확인 모드"), CONFIRM_LABELS, confirmMode, close,
+                note = tr(
+                    "Careful: asks before every message, mail, call, post, alarm and wallpaper change, even ones you dictated yourself. Balanced: messages, calls and other everyday steps go ahead without asking; asks only before payments, passwords and deleting. Autopilot: like Balanced, and deleting asks only for everything at once or something that cannot come back. Routines always run as Careful.",
+                    "신중하게: 직접 불러 준 것까지 모든 메시지·메일·전화·게시, 알람·배경화면 전에 물어봐요. 균형 있게: 메시지·전화 같은 일상적인 일은 묻지 않고, 결제·비밀번호·삭제 전에만 물어봐요. 자동 조종: 균형 있게와 같고, 삭제는 한꺼번에 지우거나 되돌릴 수 없을 때만 물어봐요. 루틴은 항상 신중하게로 실행돼요.",
+                ),
+            ) { v -> scope.launch { settings.setConfirmMode(v) } }
             Choice.ASSIST -> ChoiceDialog(
                 tr("Press and hold side button", "측면 버튼 길게 누르기"), ASSIST_LABELS, assistAction, close,
                 note = tr("‘Ideas for this screen’ sends the text on screen to a light model, which suggests things to do. Nothing happens before you press.", "‘이 화면으로 할 일’은 지금 화면의 글자를 가벼운 모델에 보내 할 만한 일을 골라 줘요. 누르기 전에는 아무것도 하지 않아요."),
@@ -973,8 +978,8 @@ private fun DeepgramKeyRow(settings: SettingsStore, scope: CoroutineScope) {
             Text(tr("Deepgram voice", "Deepgram 음성"), fontSize = 15.sp, color = c.text)
             Text(
                 tr(
-                    "With a key, the mic uses Deepgram, and a command spoken from the side button is answered aloud in English, then the mic listens again",
-                    "키를 넣으면 마이크가 Deepgram을 쓰고, 측면 버튼으로 말한 명령에 영어로 소리 내어 답한 뒤 다시 들어요",
+                    "With a key, the mic and spoken replies use Deepgram, and a command spoken from the side button is answered aloud, then the mic listens again",
+                    "키를 넣으면 마이크와 소리 내어 읽기에 Deepgram을 쓰고, 측면 버튼으로 말한 명령에 소리 내어 답한 뒤 다시 들어요",
                 ),
                 fontSize = 12.5.sp, color = c.textSub,
             )

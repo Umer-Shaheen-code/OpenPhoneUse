@@ -45,6 +45,15 @@ class DeepgramTest {
     }
 
     @Test
+    fun fluxVoicePerLanguage() {
+        assertEquals("flux-hannah-en", Deepgram.ttsModel("en-US"))
+        assertEquals("flux-usman-ur", Deepgram.ttsModel("ur-PK"))
+        assertEquals("flux-ajay-hi", Deepgram.ttsModel("hi-IN"))
+        assertEquals("flux-eunji-ko", Deepgram.ttsModel("ko-KR"))
+        assertEquals(null, Deepgram.ttsModel("ar-SA"))
+    }
+
+    @Test
     fun chunksSplitAtSentencesUnderTheLimit() {
         val text = "First sentence here. Second one is a bit longer. Third."
         val parts = Deepgram.chunks(text, max = 30)

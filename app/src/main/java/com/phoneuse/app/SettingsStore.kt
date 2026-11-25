@@ -36,6 +36,13 @@ enum class AssistAction { SUGGEST, TYPE }
 /** Settings "조작 속도": every settle wait of the agent is multiplied by [waitScale]. */
 enum class ControlSpeed(val waitScale: Double) { FAST(0.7), NORMAL(1.0), SLOW(1.4) }
 
+/**
+ * Settings "확인 모드" (see agent/ConfirmPolicyGate.kt). CAREFUL: every SEND and CHANGE asks too, even one the user
+ * dictated or asked for themselves (ToolExecutor.careful). BALANCED: SEND and CHANGE never ask; MONEY, SECURITY
+ * and DELETE do. AUTOPILOT: as BALANCED, and an on-screen DELETE asks only when bulk or permanent.
+ */
+enum class ConfirmMode { CAREFUL, BALANCED, AUTOPILOT }
+
 /** Settings "글자 크기": multiplies the system font scale inside the app. */
 enum class FontSize(val scale: Float) { DEFAULT(1f), LARGE(1.15f), LARGEST(1.3f) }
 
@@ -152,11 +159,11 @@ class SettingsStore internal constructor(
     /** Settings "대화 기록 보관": days to keep a conversation after its last message; 0 = forever (the default). */
     val retentionDays: Flow<Int> = store.data.map { prefs -> prefs[RETENTION]?.takeIf { it in RETENTION_OPTIONS } ?: 0 }
 
-    /**
-     * Settings "메시지 보내기 전 확인": SEND (messages, mail, posts) and CHANGE (alarm, wallpaper) ask first; on by
-     * default. MONEY, SECURITY and DELETE always ask, and send_sms always asks, whatever this says.
-     */
-    val confirmSend: Flow<Boolean> = store.data.map { it[CONFIRM_SEND] ?: true }
+    /** Settings "확인 모드"; CAREFUL by default. Before it, the "메시지 보내기 전 확인" switch off meant BALANCED. */
+    val confirmMode: Flow<ConfirmMode> = store.data.map { prefs ->
+        prefs[CONFIRM_MODE]?.let { enumOf(it, ConfirmMode.CAREFUL) }
+            ?: if (prefs[CONFIRM_SEND] == false) ConfirmMode.BALANCED else ConfirmMode.CAREFUL
+    }
 
     /**
      * Settings "AI 안전 검사": the acting model's own declaration of what a tap or typing will do counts on top of the
@@ -357,8 +364,8 @@ class SettingsStore internal constructor(
         store.edit { it[RETENTION] = v }
     }
 
-    suspend fun setConfirmSend(v: Boolean) {
-        store.edit { it[CONFIRM_SEND] = v }
+    suspend fun setConfirmMode(v: ConfirmMode) {
+        store.edit { it[CONFIRM_MODE] = v.name }
     }
 
     suspend fun setAssistAction(v: AssistAction) {
@@ -463,7 +470,9 @@ class SettingsStore internal constructor(
         const val DAY_MINUTES = 24 * 60
 
         private val RETENTION = intPreferencesKey("retention_days")
+        /** Legacy switch, read only to migrate into [CONFIRM_MODE]. */
         private val CONFIRM_SEND = booleanPreferencesKey("confirm_send")
+        private val CONFIRM_MODE = stringPreferencesKey("confirm_mode")
         private val RISK_JUDGE = booleanPreferencesKey("risk_judge")
         private val UNDERSTAND_NOTIFICATIONS = booleanPreferencesKey("understand_notifications")
         private val UNDERSTAND_NOTICE = booleanPreferencesKey("understand_notice_shown")

@@ -42,8 +42,8 @@ object VoiceMode {
         return name.replaceFirstChar { it.uppercase() }
     }
 
-    /** Added to a voice-mode run's prompt: the reply is spoken by an English-only voice. */
-    const val NOTE = "Voice mode: the user spoke this command and your final reply will be read aloud by an English-only voice. " +
-        "Do the task as usual, then reply in English whatever language they used: one to three short spoken sentences, " +
+    /** Added to a voice-mode run's prompt: the reply is read aloud in the user's voice language. */
+    const val NOTE = "Voice mode: the user spoke this command and your final reply will be read aloud. " +
+        "Do the task as usual, then reply in the language they spoke: one to three short spoken sentences, " +
         "no Markdown, lists, links, emoji or tables."
 }

@@ -259,11 +259,12 @@ class RiskJudgeTest {
         label: String = "삭제",
         trust: Boolean = true,
         risk: String? = "delete",
+        autopilot: Boolean = false,
     ): Pair<Rig, CompressedScreen> {
         val s = snap(node("운동하기", 50, clickable = false), node(label, 200))
         val dev = FakeDeviceController(listOf(s))
         val gate = FakeUserGate().apply { confirmResult = false }
-        val ex = ToolExecutor(dev, gate, trustUserAuthorized = trust, inlineRisk = true)
+        val ex = ToolExecutor(dev, gate, trustUserAuthorized = trust, inlineRisk = true, autopilot = autopilot)
         if (trust) ex.userSaid(said)
         val declared = risk?.let { ",\"risk\":\"$it\",\"effect\":\"할 일 '운동하기' 삭제\"$extra" }.orEmpty()
         return Rig(dev, gate, ex, """{"index":2$declared}""") to screenOf(s)
@@ -283,6 +284,22 @@ class RiskJudgeTest {
             assertTrue(said, e.tap().startsWith("OK"))
             assertTrue(said, e.first.gate.confirms.isEmpty())
         }
+    }
+
+    @Test fun autopilotDeletesOneRecoverableItemButAsksForBulkOrPermanent() = runTest {
+        // Not named by the user, but one item that can come back: Autopilot goes ahead, Balanced/Careful ask.
+        val one = deleteRig(said = "할 일 목록 정리해줘", extra = ""","delete_scope":"one"""", autopilot = true)
+        assertTrue(one.tap().startsWith("OK"))
+        assertTrue(one.first.gate.confirms.isEmpty())
+        val notAutopilot = deleteRig(said = "할 일 목록 정리해줘", extra = ""","delete_scope":"one"""")
+        assertEquals("CANCELLED by user", notAutopilot.tap())
+        // Bulk, permanent, no scope, a permanent word on the button, or "delete all" in the request: the card.
+        for (extra in listOf(""","delete_scope":"bulk"""", ""","delete_scope":"permanent"""", "")) {
+            val r = deleteRig(extra = extra, autopilot = true)
+            assertEquals(extra, "CANCELLED by user", r.tap())
+        }
+        assertEquals("CANCELLED by user", deleteRig(label = "영구 삭제", extra = ""","delete_scope":"one"""", autopilot = true).tap())
+        assertEquals("CANCELLED by user", deleteRig(said = "할 일 전부 삭제해줘", extra = ""","delete_scope":"one"""", autopilot = true).tap())
     }
 
     @Test fun deleteTheUserNeverAskedForAsks() = runTest {

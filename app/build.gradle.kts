@@ -17,6 +17,14 @@ android {
         targetSdk = 36
         versionCode = 8
         versionName = "0.0.8"
+
+        // The app's own Deepgram key, built in for every user: deepgram.apiKey in local.properties (kept out of git)
+        // or DEEPGRAM_API_KEY in CI. Empty = none; a user's key saved in Settings is then used instead.
+        val localProps = Properties().apply {
+            rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
+        }
+        val deepgramKey = (localProps.getProperty("deepgram.apiKey") ?: System.getenv("DEEPGRAM_API_KEY")).orEmpty().trim()
+        buildConfigField("String", "DEEPGRAM_KEY", "\"$deepgramKey\"")
     }
 
     // The release key stays outside the repository: in ~/.openphoneuse/keystore.properties on the maintainer's

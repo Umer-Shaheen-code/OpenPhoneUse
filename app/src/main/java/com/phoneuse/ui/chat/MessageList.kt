@@ -112,6 +112,7 @@ fun MessageList(
     onOpenMemory: () -> Unit = {},
     /** The card the unfolded result pane shows (PaneCard.key); it is not repeated in the conversation. */
     paneCardKey: String? = null,
+    onOpenSettings: () -> Unit = {},
 ) {
     val onCardAction = rememberCardActionRunner(onCardPrompt)
     // Prompt buttons work only on the newest card of their kind (CardStaleness).
@@ -129,7 +130,7 @@ fun MessageList(
         items(messages.asReversed(), key = { it.id }) { m ->
             when (m.role) {
                 MessageRole.USER -> UserMessage(m)
-                MessageRole.ASSISTANT -> AssistantMessage(m, onCardAction, memoryIds, onForgetMemory, onOpenMemory, memoryTexts, onRestoreMemory, paneCardKey, superseded)
+                MessageRole.ASSISTANT -> AssistantMessage(m, onCardAction, memoryIds, onForgetMemory, onOpenMemory, memoryTexts, onRestoreMemory, paneCardKey, superseded, onOpenSettings)
             }
         }
     }
@@ -241,6 +242,7 @@ private fun AssistantMessage(
     onRestoreMemory: (ForgottenMemory) -> Unit,
     paneCardKey: String?,
     superseded: Set<com.phoneuse.cards.CardStaleness.CardAt> = emptySet(),
+    onOpenSettings: () -> Unit = {},
 ) {
     val context = LocalContext.current
     // An older card of a kind shown again later: its prompt would be read against the newer card.
@@ -265,6 +267,10 @@ private fun AssistantMessage(
             ForgottenLine(f, restored = memoryTexts?.contains(f.text) ?: false, onRestore = { onRestoreMemory(f) })
         }
         if (m.text.isNotBlank()) AnswerText(m.text)
+        // No model set up: the one thing to do next is in Settings.
+        if (com.phoneuse.app.NotSignedIn.matches(m.text.trim())) {
+            PuButton(tr("Open Settings", "설정 열기"), onOpenSettings, height = 40.dp, radius = 12.dp, fontSize = 14)
+        }
         // The ChatGPT plan's usage limit: the one thing to do next is in its usage settings.
         if (m.extras.planUsageLimit) {
             PuButton(

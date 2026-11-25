@@ -35,15 +35,18 @@ import kotlin.math.log10
 import kotlin.math.sqrt
 
 /**
- * Deepgram for voice mode: Nova-3 live speech-to-text over a WebSocket ([Listener]) and Aura-2 text-to-speech
+ * Deepgram for voice mode: Nova-3 live speech-to-text over a WebSocket ([Listener]) and Flux text-to-speech
  * ([speak]). Used instead of Android's recognizer and TTS once a Deepgram key is saved in Settings.
  */
 object Deepgram {
     const val SECRET = "deepgram_api_key"
 
-    /** The saved key, loaded at start and updated when Settings saves one; null or blank = not set up. */
+    /** The key built into the app (see app/build.gradle.kts); blank = none, so users save their own in Settings. */
+    val builtIn: Boolean get() = com.phoneuse.BuildConfig.DEEPGRAM_KEY.isNotBlank()
+
+    /** The key in use: the built-in one, else the one saved in Settings; null or blank = not set up. */
     @Volatile
-    var key: String? = null
+    var key: String? = com.phoneuse.BuildConfig.DEEPGRAM_KEY.ifBlank { null }
 
     val enabled: Boolean get() = !key.isNullOrBlank()
 
@@ -52,8 +55,18 @@ object Deepgram {
     /** Longer than this for a reply's audio and it is read in the system voice instead, so voice mode never stalls. */
     private const val SPEAK_TIMEOUT_S = 6L
 
-    /** Aura-2 speaks English only, so voice mode asks the model for English replies. */
-    private const val TTS_MODEL = "aura-2-thalia-en"
+    /**
+     * The Flux voice (/v2/speak) for a BCP-47 [languageTag], or null when the app has none for it (the system voice
+     * reads then). Urdu and Korean are Deepgram Early Access: numbers and dates may not be read out well.
+     * shortcut: only the app's voice languages have a voice; add more from Deepgram's Flux voice list when needed.
+     */
+    fun ttsModel(languageTag: String): String? = when (languageTag.substringBefore('-').lowercase()) {
+        "en" -> "flux-hannah-en"
+        "ur" -> "flux-usman-ur"
+        "hi" -> "flux-ajay-hi"
+        "ko" -> "flux-eunji-ko"
+        else -> null
+    }
 
     /** Deepgram's per-request text limit is 2000 characters. */
     private const val TTS_MAX_CHARS = 1_800
@@ -298,18 +311,18 @@ object Deepgram {
     private var playback: Playback? = null
 
     /**
-     * Reads [text] in the Aura-2 voice on a background thread. [onPlaying] runs on the main thread when sound starts;
+     * Reads [text] in the Flux voice [model] (see [ttsModel]) on a background thread. [onPlaying] runs on the main thread when sound starts;
      * [onDone] with true when it was read to the end, false when it failed (the caller can fall back); neither after
      * [stopSpeaking].
      */
-    fun speak(http: OkHttpClient, apiKey: String, text: String, onPlaying: () -> Unit, onDone: (Boolean) -> Unit) {
+    fun speak(http: OkHttpClient, apiKey: String, text: String, model: String, onPlaying: () -> Unit, onDone: (Boolean) -> Unit) {
         stopSpeaking()
         val p = Playback()
         playback = p
         val main = Handler(Looper.getMainLooper())
         Thread({
             val ok = try {
-                play(http, apiKey, text, p) { main.post { if (!p.stopped) onPlaying() } }
+                play(http, apiKey, text, model, p) { main.post { if (!p.stopped) onPlaying() } }
                 true
             } catch (e: Exception) {
                 if (!p.stopped) Log.w(TAG, "speak failed", e)
@@ -328,12 +341,12 @@ object Deepgram {
         p.ended?.countDown()
     }
 
-    private fun play(http: OkHttpClient, apiKey: String, text: String, p: Playback, onPlaying: () -> Unit) {
+    private fun play(http: OkHttpClient, apiKey: String, text: String, model: String, p: Playback, onPlaying: () -> Unit) {
         val client = http.newBuilder().callTimeout(SPEAK_TIMEOUT_S, TimeUnit.SECONDS).build()
         var first = true
         for (part in chunks(text)) {
             if (p.stopped) return
-            val mp3 = fetch(client, apiKey, part, p)
+            val mp3 = fetch(client, apiKey, part, model, p)
             if (p.stopped) return
             playMp3(mp3, p) {
                 if (first) onPlaying()
@@ -346,8 +359,8 @@ object Deepgram {
      * One piece as MP3. Compressed (48 kbps) rather than raw PCM (384 kbps): on a busy connection (a video app
      * loading next to us) raw audio arrived slower than it played and stuttered, while this arrives whole in a moment.
      */
-    private fun fetch(client: OkHttpClient, apiKey: String, part: String, p: Playback): ByteArray {
-        val url = "https://api.deepgram.com/v1/speak?model=$TTS_MODEL&encoding=mp3&bit_rate=48000"
+    private fun fetch(client: OkHttpClient, apiKey: String, part: String, model: String, p: Playback): ByteArray {
+        val url = "https://api.deepgram.com/v2/speak?model=$model&encoding=mp3&bit_rate=48000"
         val body = buildJsonObject { put("text", part) }.toString().toRequestBody("application/json".toMediaType())
         val call = client.newCall(Request.Builder().url(url).header("Authorization", "Token $apiKey").post(body).build())
         p.call = call

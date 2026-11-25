@@ -305,6 +305,61 @@ class MessagingToolsTest {
         assertEquals(RiskCategory.SEND, gate.confirms.single().first)
     }
 
+    @Test fun balancedSkipsSendsButStillAsksForMoney() {
+        fun button(text: String, top: Int) = com.phoneuse.screen.UiNode(
+            windowId = 0, path = listOf(top), className = "android.widget.Button", text = text,
+            contentDescription = null, hint = null, viewId = null,
+            bounds = com.phoneuse.screen.Bounds(100, top, 300, top + 60), clickable = true, editable = false, password = false,
+        )
+        val screen = ScreenSnapshot("com.app", 1080, 2400, listOf(button("보내기", 100), button("결제하기", 300)))
+        val e = ToolExecutor(
+            FakeDeviceController(listOf(screen)),
+            gate,
+            messaging = MessagingAccess(NotificationTool(notifications) { now }, SmsTool(sms) { now }),
+            confirmSend = false,
+            skipSends = true,
+        )
+        run("notifications_recent", "{}", e)
+        gate.confirmResult = false
+        val compressed = com.phoneuse.screen.TreeCompressor.compress(screen)
+        // Tainted, not user_authorized: a send still goes without a card, and so does send_sms.
+        runBlocking { e.execute(InputItem.FunctionCall("c", "tap", """{"index":1}"""), compressed) }
+        run("send_sms", """{"to":"010-1234-5678","body":"곧 도착해"}""", e)
+        assertTrue(gate.confirms.toString(), gate.confirms.isEmpty())
+        assertEquals(1, sms.sent.size)
+
+        val r = runBlocking { e.execute(InputItem.FunctionCall("c", "tap", """{"index":2}"""), compressed) }
+        assertEquals("CANCELLED by user", r.output)
+        assertEquals(RiskCategory.MONEY, gate.confirms.single().first)
+    }
+
+    @Test fun carefulAsksEvenForWhatTheUserDictated() {
+        val sendButton = com.phoneuse.screen.UiNode(
+            windowId = 0, path = listOf(0), className = "android.widget.Button", text = "보내기",
+            contentDescription = null, hint = null, viewId = null,
+            bounds = com.phoneuse.screen.Bounds(100, 100, 300, 160), clickable = true, editable = false, password = false,
+        )
+        val screen = ScreenSnapshot("com.app", 1080, 2400, listOf(sendButton))
+        val e = ToolExecutor(
+            FakeDeviceController(listOf(screen)),
+            gate,
+            messaging = MessagingAccess(NotificationTool(notifications) { now }, SmsTool(sms, contacts) { now }),
+            careful = true,
+        )
+        e.userSaid("010-1234-5678 번호로 '지금 출발해요' 라고 문자 보내줘")
+        gate.confirmResult = false
+        // Fully dictated: Balanced/Autopilot would send it at once (see the test below); Careful asks.
+        val sms1 = run("send_sms", """{"to":"01012345678","body":"지금 출발해요"}""", e)
+        assertTrue(sms1.output, sms1.output.startsWith("CANCELLED"))
+        // A send button the model calls user_authorized, on a clean run: Careful still asks.
+        val tap = runBlocking {
+            e.execute(InputItem.FunctionCall("c", "tap", """{"index":1,"user_authorized":true}"""), com.phoneuse.screen.TreeCompressor.compress(screen))
+        }
+        assertEquals("CANCELLED by user", tap.output)
+        assertEquals(listOf(RiskCategory.SEND, RiskCategory.SEND), gate.confirms.map { it.first })
+        assertTrue(sms.sent.isEmpty())
+    }
+
     @Test fun sendSmsTheUserFullyDictatedNeedsNoCard() {
         gate.confirmResult = false
         val e = executor()

@@ -132,6 +132,15 @@ enum class Source {
  * The overlay (and touch blocking) only comes up once the agent is about to touch the device, or from the
  * start for [Source.ASSIST]; once up, it is always cleaned up.
  */
+/** The reply a run leaves when no model is set up; the chat shows an "Open Settings" button under it. */
+object NotSignedIn {
+    const val EN = "Sign in or add an API key in Settings"
+    const val KO = "설정에서 로그인하거나 API 키를 넣어 주세요"
+
+    /** Either language, since the reply keeps the language of the run that wrote it. */
+    fun matches(text: String): Boolean = text == EN || text == KO
+}
+
 class AgentRunner(
     private val context: Context,
     private val settings: SettingsStore,
@@ -525,6 +534,7 @@ class AgentRunner(
                     true
                 },
             )
+            val confirmMode = settings.confirmMode.first()
             val loop = AgentLoop(
                 model,
                 ToolExecutor(
@@ -553,8 +563,11 @@ class AgentRunner(
                     connectors = connectorTools,
                     routines = routineAccess(),
                     historyTainted = historyTainted,
-                    // The switch never widens a routine run: nobody wrote this request just now.
-                    confirmSend = settings.confirmSend.first() || source == Source.ROUTINE,
+                    // The mode never widens a routine run: nobody wrote this request just now.
+                    confirmSend = confirmMode == ConfirmMode.CAREFUL || source == Source.ROUTINE,
+                    skipSends = confirmMode != ConfirmMode.CAREFUL && source != Source.ROUTINE,
+                    autopilot = confirmMode == ConfirmMode.AUTOPILOT && source != Source.ROUTINE,
+                    careful = confirmMode == ConfirmMode.CAREFUL && source != Source.ROUTINE,
                     screenshots = settings.screenContent.first() == ScreenContent.ALL,
                     fixedSend = routine?.fixedSend,
                     appContext = context,
@@ -730,7 +743,7 @@ class AgentRunner(
         @Volatile var runExecutor: ToolExecutor? = null
         val flaggedThirdParty = AtomicBoolean(false)
         @Volatile var tipsOn = false
-        // A command spoken in voice mode: English spoken reply, then the mic opens again.
+        // A command spoken in voice mode: spoken reply, then the mic opens again.
         @Volatile var voice = false
         // Steps shown so far, and how many there were when voice mode said "Opening X" (-1: not said).
         @Volatile var acts = 0
@@ -838,7 +851,7 @@ class AgentRunner(
                 started.complete(Unit)
                 ReadAloud.whenAckDone { listenAgain(id) }
             } else {
-                guarded("read aloud") { ReadAloud.speakThen(context, answer, onPlaying = { started.complete(Unit) }) { listenAgain(id) } }
+                guarded("read aloud") { ReadAloud.speakThen(context, answer, settings.voiceLanguage.first().tag, onPlaying = { started.complete(Unit) }) { listenAgain(id) } }
                 e.overlay.releaseTouches()
                 withTimeoutOrNull(VOICE_LINGER_MAX_MS) { started.await() }
             }
@@ -1025,7 +1038,7 @@ class AgentRunner(
         const val TIPS_PER_APP = 3
         val SERVICE_LOST: String get() = tr("Accessibility service was turned off", "접근성 서비스가 꺼졌어요")
         val NO_SERVICE: String get() = tr("Please turn on the accessibility service", "접근성 서비스를 켜주세요")
-        val NOT_SIGNED_IN: String get() = tr("Sign in or add an API key in Settings", "설정에서 로그인하거나 API 키를 넣어 주세요")
+        val NOT_SIGNED_IN: String get() = tr(NotSignedIn.EN, NotSignedIn.KO)
         val CANCELLED: String get() = tr("Stopped", "중단됨")
         val ERROR: String get() = tr("Something went wrong", "오류가 발생했어요")
     }
