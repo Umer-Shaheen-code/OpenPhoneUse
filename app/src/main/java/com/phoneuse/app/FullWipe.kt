@@ -35,7 +35,13 @@ object FullWipe {
                     ReadAloud.stop()
                     for (c in AppGraph.chats.conversations().first()) AppGraph.chats.delete(c.id)
                 },
-                tr("Notification history", "알림 기록") to { NotificationStore.get(app).clear() },
+                tr("Notification history", "알림 기록") to {
+                    NotificationStore.get(app).clear()
+                    com.phoneuse.local.LiveNotificationHub.get(app).clear()
+                },
+                tr("Local notes & lists", "로컬 메모 및 목록") to {
+                    com.phoneuse.local.LocalAgentStore(app).wipeAll()
+                },
                 tr("Proactive help", "알아서 챙기기") to { ProactiveSystem.get(app).clearNow() },
                 tr("Usage", "사용량") to { AppGraph.usage.clear() },
                 tr("Routines", "루틴") to {

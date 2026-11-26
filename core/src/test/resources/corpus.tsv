@@ -1,0 +1,755 @@
+# utterance	intent	expected slots (k=v;k=v). contact=… is the spoken span. Lines starting with # are comments.
+what time is it	time.now
+What's the time?	time.now
+hey tell me the time please	time.now
+can you tell me what time it is	time.now
+time now	time.now
+what time is it in Dubai	time.in_city	city=Dubai
+what's the time in new york	time.in_city	city=new york
+what's the date today	date.today
+what is today's date	date.today
+what date is it	date.today
+what day is it today	day.today
+how many days until 25th December	date.days_until
+how many days left till christmas	date.days_until
+battery	battery.status
+what's my battery level	battery.status
+how much battery do I have	battery.status
+am I charging	battery.status
+read my WhatsApp notifications	notif.read	app=whatsapp
+tell me notifications from whatsapp	notif.read	app=whatsapp
+tell me my notifications from WhatsApp	notif.read	app=whatsapp
+any new WhatsApp messages	notif.read	app=whatsapp
+do I have any new messages	notif.read
+read my messages	notif.read
+check whatsapp	notif.read	app=whatsapp
+read my gmail notifications	notif.read	app=gmail
+tell me notifications from gmail	notif.read	app=gmail
+any new emails	notif.read	app=gmail
+read my emails	notif.read	app=gmail
+check my email	notif.read	app=gmail
+do I have any emails from Amazon	notif.read	contact=Amazon;app=gmail
+what did Abdullah say	notif.read	contact=Abdullah
+any messages from Abdullah	notif.read	contact=Abdullah
+read messages from mom	notif.read	contact=mom
+what did I miss	notif.read
+who messaged me	notif.read
+read all my notifications	notif.read
+reply I am on the way to Abdullah	msg.send	message=I am on the way;contact=Abdullah
+Reply "I am on the way" to Abdullah.	msg.send	message=I am on the way;contact=Abdullah
+reply to Abdullah I'm on the way	msg.send	contact=Abdullah;message=I'm on the way
+reply to Abdullah saying I'm on the way	msg.send	contact=Abdullah;message=I'm on the way
+tell Abdullah I'm on the way	msg.send	contact=Abdullah;message=I'm on the way
+tell Abdullah Khan I'm running late	msg.send	contact=Abdullah Khan;message=I'm running late
+tell Abdullah that I'll call him later	msg.send	contact=Abdullah;message=I'll call him later
+send I'm coming to Ali	msg.send	message=I'm coming;contact=Ali
+text Ali Raza I'll be there in 10 minutes	msg.send	contact=Ali Raza;message=I'll be there in 10 minutes
+message mom on whatsapp that I reached home	msg.send	contact=mom;app=whatsapp;message=I reached home
+send a whatsapp message to Sara saying meeting is at 5	msg.send	app=whatsapp;contact=Sara;message=meeting is at 5
+reply ok	msg.send	message=ok
+reply to him see you soon	msg.send	contact=him;message=see you soon
+reply to Abdullah	msg.send	contact=Abdullah
+whatsapp Abdullah call me when free	msg.send	contact=Abdullah;message=call me when free
+ask Abdullah to call me	msg.send	contact=Abdullah;message=call me
+send sms to Ali that I'm busy	msg.send	app=sms;contact=Ali;message=I'm busy
+forward the video by 3 mins	media.seek_relative	duration=180000;direction=forward
+forward the music by 3 minutes	media.seek_relative	duration=180000;direction=forward
+forward 3 minutes	media.seek_relative	duration=180000;direction=forward
+fast forward 30 seconds	media.seek_relative	duration=30000;direction=forward
+skip ahead 2 minutes	media.seek_relative	duration=120000;direction=forward
+skip 30 seconds	media.seek_relative	duration=30000;direction=forward
+go forward one minute and a half	media.seek_relative	duration=90000;direction=forward
+jump 10 seconds ahead	media.seek_relative	duration=10000;direction=forward
+forward it by three minutes	media.seek_relative	duration=180000;direction=forward
+go back 30 seconds	media.seek_relative	duration=30000;direction=back
+rewind 10 seconds	media.seek_relative	duration=10000;direction=back
+rewind the video by a minute	media.seek_relative	duration=60000;direction=back
+back 15 seconds	media.seek_relative	duration=15000;direction=back
+go back two minutes	media.seek_relative	duration=120000;direction=back
+skip back 1 minute 30	media.seek_relative	duration=90000;direction=back
+go to 1:20	media.seek_absolute	position=80000
+jump to minute 5	media.seek_absolute	position=300000
+start from the beginning	media.seek_absolute	position=0
+restart the video	media.seek_absolute	position=0
+pause	media.pause
+pause the music	media.pause
+pause spotify	media.pause	app=spotify
+stop the music	media.pause
+resume	media.play
+play	media.play
+continue the video	media.play
+next song	media.next
+skip	media.next
+skip this song	media.next
+next	media.next
+previous track	media.previous
+play the previous song	media.previous
+what's playing	media.now_playing
+what song is this	media.now_playing
+who sings this	media.now_playing
+play at 1.5x	media.speed	speed=1.5
+set playback speed to 2x	media.speed	speed=2.0
+normal speed	media.speed	speed=1.0
+like this song	media.like
+play coke studio on spotify	media.play_search	query=coke studio;app=spotify
+play lofi beats	media.play_search	query=lofi beats
+search youtube for cooking videos	media.play_search	app=youtube;query=cooking videos
+set volume to 40%	volume.set	level=40
+volume 50 percent	volume.set	level=50
+set the volume to max	volume.set	level=100
+volume up	volume.up
+louder	volume.up
+turn it down	volume.down
+mute	volume.mute
+put the phone on silent	ringer.mode	mode=silent
+vibrate mode	ringer.mode	mode=vibrate
+turn on do not disturb	dnd.set	state=on
+turn off dnd	dnd.set	state=off
+turn on the flashlight	torch.set	state=on
+torch off	torch.set	state=off
+flashlight	torch.set	state=toggle
+set an alarm for 6:30	alarm.set	time=6:30
+wake me up at 7 am	alarm.set	time=7:00
+set alarm for 7 pm	alarm.set	time=19:00
+alarm at 5	alarm.set	time=5:00
+set a timer for 10 minutes	timer.set	duration=600000
+timer 5 minutes	timer.set	duration=300000
+start a 2 minute timer	timer.set	duration=120000
+set a timer for an hour and a half	timer.set	duration=5400000
+dismiss the alarm	alarm.dismiss
+snooze	alarm.snooze
+remind me in 20 minutes to call mom	reminder.set	duration=1200000;text=call mom
+remind me to drink water in an hour	reminder.set	text=drink water;duration=3600000
+remind me at 5 pm to pick up the kids	reminder.set	time=17:00;text=pick up the kids
+note parking on level 3	note.add	note=parking on level 3
+take a note that the wifi password is on the router	note.add	note=the wifi password is on the router
+read my notes	note.read
+add milk to my shopping list	list.add	item=milk;list=shopping
+add eggs to the grocery list	list.add	item=eggs;list=grocery
+read my shopping list	list.read	list=shopping
+what's 18 percent of 2,450	calc
+what is 5 times 7 plus 2	calc
+convert 5 miles to km	calc
+what's the weather	weather
+will it rain tomorrow	weather	when=tomorrow
+what's on my calendar today	calendar.agenda	day=today
+do I have any meetings tomorrow	calendar.agenda	day=tomorrow
+call Abdullah	call.contact	contact=Abdullah
+call mom on whatsapp	call.contact	contact=mom;app=whatsapp
+who called me	call.missed
+any missed calls	call.missed
+open spotify	app.open	appname=spotify
+navigate home	nav.go	place=home
+take me to the airport	nav.go	place=the airport
+mark it as read	notif.mark_read
+mark Abdullah's messages as read	notif.mark_read	contact=Abdullah
+clear my whatsapp notifications	notif.clear	app=whatsapp
+archive that email	notif.archive
+lock the phone	device.lock
+take a screenshot	device.screenshot
+what can you do	meta.help
+say that again	meta.repeat
+read it again	meta.repeat
+cancel	meta.cancel
+never mind	meta.cancel
+yes	meta.yes
+yes send it	meta.yes
+no	meta.no
+the first one	meta.choose	index=0
+second	meta.choose	index=1
+continue	list.more
+summarize my whatsapp messages	llm.summarize	app=whatsapp
+what is the current time	time.now
+tell me the time	time.now
+time please	time.now
+do you know what time it is	time.now
+hey what time is it right now	time.now
+could you tell me what time it is	time.now
+please tell me the time	time.now
+what is time now	time.now
+what time is it in London	time.in_city	city=London
+what is the time in Tokyo	time.in_city	city=Tokyo
+tell me the time in Karachi	time.in_city	city=Karachi
+what is the current time in Paris	time.in_city	city=Paris
+time in Berlin	time.in_city	city=Berlin
+what time is it in Toronto	time.in_city	city=Toronto
+what is the time in Sydney	time.in_city	city=Sydney
+time in Riyadh	time.in_city	city=Riyadh
+what is the date	date.today
+tell me today's date	date.today
+tell me the date today	date.today
+what is today date	date.today
+what is the date of today	date.today
+which date is it today	date.today
+hey what's the date	date.today
+what day is it	day.today
+what day is today	day.today
+what is the day today	day.today
+which day is it today	day.today
+is today Friday	day.today	day=friday
+is today Monday	day.today	day=monday
+how many days until New Year	date.days_until
+how many days are left till 25 December	date.days_until
+how long until Friday	date.days_until
+days until 1st January	date.days_until
+how many days before 14 August	date.days_until
+what is my battery	battery.status
+what is the battery percentage	battery.status
+check my battery	battery.status
+check the battery level	battery.status
+battery status	battery.status
+battery percentage	battery.status
+is my phone charging	battery.status
+is it charging	battery.status
+how long until my phone is fully charged	battery.status
+how long till it is full	battery.status
+how much battery is left	battery.status
+read my notifications	notif.read
+read my unread messages	notif.read
+check my messages	notif.read
+any new messages	notif.read
+do I have any unread messages	notif.read
+have I got any new messages	notif.read
+got any new messages	notif.read
+read my whatsapp	notif.read	app=whatsapp
+check my whatsapp messages	notif.read	app=whatsapp
+any unread whatsapp messages	notif.read	app=whatsapp
+read out my whatsapp notifications	notif.read	app=whatsapp
+any new messages on whatsapp	notif.read	app=whatsapp
+what is new on whatsapp	notif.read	app=whatsapp
+anything new in whatsapp	notif.read	app=whatsapp
+read my what's app notifications	notif.read	app=whatsapp
+any new messages on what's app	notif.read	app=whatsapp
+read my telegram messages	notif.read	app=telegram
+any new messages on telegram	notif.read	app=telegram
+check signal messages	notif.read	app=signal
+read my slack notifications	notif.read	app=slack
+read my sms	notif.read	app=sms
+check my text messages	notif.read	app=sms
+any new texts	notif.read	app=sms
+read my gmail	notif.read	app=gmail
+check my gmail	notif.read	app=gmail
+any unread emails	notif.read	app=gmail
+do I have any new emails	notif.read	app=gmail
+read my latest emails	notif.read	app=gmail
+check my gee mail	notif.read	app=gmail
+read my g mail notifications	notif.read	app=gmail
+any emails from Sara	notif.read	contact=Sara;app=gmail
+any mail from Amazon	notif.read	contact=Amazon;app=gmail
+any new messages from Sara	notif.read	contact=Sara
+read the latest message from Abdullah	notif.read	contact=Abdullah
+show me messages from Ali	notif.read	contact=Ali
+did Abdullah message me	notif.read	contact=Abdullah
+did mom text me	notif.read	contact=mom
+did Sara reply	notif.read	contact=Sara
+what did mom say	notif.read	contact=mom
+what did Ali send	notif.read	contact=Ali
+what did Abdullah write	notif.read	contact=Abdullah
+read my whatsapp from Abdullah	notif.read	app=whatsapp;contact=Abdullah
+read Abdullah messages	notif.read	contact=Abdullah
+who texted me	notif.read
+who emailed me	notif.read
+what did I miss on whatsapp	notif.read	app=whatsapp
+anything new	notif.read
+mark all as read	notif.mark_read
+mark that as read	notif.mark_read
+mark this as read	notif.mark_read
+mark them read	notif.mark_read
+mark everything as read	notif.mark_read
+mark Abdullah's chat as read	notif.mark_read	contact=Abdullah
+mark messages from mom as read	notif.mark_read	contact=mom
+mark all my whatsapp messages as read	notif.mark_read	app=whatsapp
+mark all gmail notifications as read	notif.mark_read	app=gmail
+clear notifications	notif.clear
+dismiss all notifications	notif.clear
+clear all	notif.clear
+clear it	notif.clear
+dismiss it	notif.clear
+clear my gmail notifications	notif.clear	app=gmail
+remove all whatsapp notifications	notif.clear	app=whatsapp
+archive it	notif.archive
+archive this email	notif.archive
+archive the email	notif.archive
+archive the mail from Amazon	notif.archive	contact=Amazon
+reply yes to Abdullah	msg.send	message=yes;contact=Abdullah
+reply I'll be there in 5 minutes to Ali	msg.send	message=I'll be there in 5 minutes;contact=Ali
+reply to mom saying I am home	msg.send	contact=mom;message=I am home
+reply to Sara with thanks	msg.send	contact=Sara;message=thanks
+reply to Abdullah on whatsapp saying on my way	msg.send	contact=Abdullah;app=whatsapp;message=on my way
+reply back ok	msg.send	message=ok
+reply saying I'm busy right now	msg.send	message=I'm busy right now
+reply that I will call later	msg.send	message=I will call later
+reply	msg.send
+tell mom I'm eating dinner	msg.send	contact=mom;message=I'm eating dinner
+tell Ali that I'm outside	msg.send	contact=Ali;message=I'm outside
+tell Sara on whatsapp I'll send the file	msg.send	contact=Sara;app=whatsapp;message=I'll send the file
+tell him I'm coming	msg.send	contact=him;message=I'm coming
+send her I'm sorry	msg.send	contact=her;message=I'm sorry
+text them I'll be late	msg.send	contact=them;message=I'll be late
+text Abdullah see you at 6	msg.send	contact=Abdullah;message=see you at 6
+message Ali on telegram hello	msg.send	contact=Ali;app=telegram;message=hello
+ping Sara are you free	msg.send	contact=Sara;message=are you free
+whatsapp mom I reached safely	msg.send	contact=mom;message=I reached safely
+send happy birthday to Ali	msg.send	message=happy birthday;contact=Ali
+send a message to Abdullah saying I'm outside	msg.send	contact=Abdullah;message=I'm outside
+send a whatsapp to mom saying call me	msg.send	app=whatsapp;contact=mom;message=call me
+send a text to Ali	msg.send	contact=Ali
+message Abdullah	msg.send	contact=Abdullah
+write good morning to mom	msg.send	message=good morning;contact=mom
+ask Ali to bring water	msg.send	contact=Ali;message=bring water
+tell Abdulla I'm coming	msg.send	contact=Abdulla;message=I'm coming
+call mom	call.contact	contact=mom
+phone Ali	call.contact	contact=Ali
+ring Sara	call.contact	contact=Sara
+dial Abdullah	call.contact	contact=Abdullah
+call Ali on whatsapp	call.contact	contact=Ali;app=whatsapp
+whatsapp call Abdullah	call.contact	app=whatsapp;contact=Abdullah
+make a call to mom	call.contact	contact=mom
+start a voice call with Ali	call.contact	contact=Ali
+video call Abdullah on whatsapp	call.contact	contact=Abdullah;app=whatsapp;video=yes
+video call mom	call.contact	contact=mom;video=yes
+call him back	call.contact
+call her back	call.contact
+call back	call.contact
+did I get any calls	call.missed
+did I miss any calls	call.missed
+read my missed calls	call.missed
+check missed calls	call.missed
+show my missed calls	call.missed
+who was calling me	call.missed
+missed calls	call.missed
+answer the call	call.answer
+pick up the phone	call.answer
+accept call	call.answer
+answer	call.answer
+decline the call	call.end
+reject call	call.end
+end the call	call.end
+hang up	call.end
+cut the call	call.end
+forward 10 seconds	media.seek_relative	duration=10000;direction=forward
+forward by 2 minutes	media.seek_relative	duration=120000;direction=forward
+fast forward the video by 1 minute	media.seek_relative	duration=60000;direction=forward
+skip ahead 30 seconds	media.seek_relative	duration=30000;direction=forward
+skip ahead by 5 minutes	media.seek_relative	duration=300000;direction=forward
+jump ahead 45 seconds	media.seek_relative	duration=45000;direction=forward
+go ahead 20 seconds	media.seek_relative	duration=20000;direction=forward
+move forward 15 seconds	media.seek_relative	duration=15000;direction=forward
+seek forward 1 minute	media.seek_relative	duration=60000;direction=forward
+advance 30 seconds	media.seek_relative	duration=30000;direction=forward
+go 2 minutes forward	media.seek_relative	duration=120000;direction=forward
+jump 30 seconds forward	media.seek_relative	duration=30000;direction=forward
+30 seconds ahead	media.seek_relative	duration=30000;direction=forward
+2 minutes forward	media.seek_relative	duration=120000;direction=forward
+skip 10 seconds	media.seek_relative	duration=10000;direction=forward
+skip ahead 1 minute 30 seconds	media.seek_relative	duration=90000;direction=forward
+for word 30 seconds	media.seek_relative	duration=30000;direction=forward
+forward the video by half a minute	media.seek_relative	duration=30000;direction=forward
+forward a couple of minutes	media.seek_relative	duration=120000;direction=forward
+rewind 30 seconds	media.seek_relative	duration=30000;direction=back
+rewind by 2 minutes	media.seek_relative	duration=120000;direction=back
+go back 10 seconds	media.seek_relative	duration=10000;direction=back
+go back by 5 minutes	media.seek_relative	duration=300000;direction=back
+skip back 45 seconds	media.seek_relative	duration=45000;direction=back
+jump back 20 seconds	media.seek_relative	duration=20000;direction=back
+move back 1 minute	media.seek_relative	duration=60000;direction=back
+seek back 15 seconds	media.seek_relative	duration=15000;direction=back
+reverse 10 seconds	media.seek_relative	duration=10000;direction=back
+go 30 seconds back	media.seek_relative	duration=30000;direction=back
+jump 2 minutes backward	media.seek_relative	duration=120000;direction=back
+10 seconds back	media.seek_relative	duration=10000;direction=back
+1 minute backward	media.seek_relative	duration=60000;direction=back
+bring it back 15 seconds	media.seek_relative	duration=15000;direction=back
+go to 2:30	media.seek_absolute	position=150000
+jump to 0:45	media.seek_absolute	position=45000
+skip to 10:00	media.seek_absolute	position=600000
+seek to 3:15	media.seek_absolute	position=195000
+move to minute 2	media.seek_absolute	position=120000
+go back to 1:00	media.seek_absolute	position=60000
+start from 2:00	media.seek_absolute	position=120000
+restart	media.seek_absolute	position=0
+replay the song	media.seek_absolute	position=0
+start it over	media.seek_absolute	position=0
+play from the start	media.seek_absolute	position=0
+pause the video	media.pause
+pause youtube	media.pause	app=youtube
+pause you tube	media.pause	app=youtube
+pause it	media.pause
+stop playing	media.pause
+stop spotify	media.pause	app=spotify
+hold the music	media.pause
+unpause	media.play
+resume the music	media.play
+resume the video	media.play
+continue playing	media.play
+start playing	media.play
+play the music	media.play
+play spotify	media.play	app=spotify
+next track	media.next
+next video	media.next
+skip track	media.next
+skip this video	media.next
+play the next song	media.next
+change the song	media.next
+switch the track	media.next
+previous song	media.previous
+last song	media.previous
+previous video	media.previous
+go back to the previous song	media.previous
+go back a song	media.previous
+go back a track	media.previous
+what is playing	media.now_playing
+what video is this	media.now_playing
+which song is playing	media.now_playing
+who sang this song	media.now_playing
+what is the name of this song	media.now_playing
+what am I listening to	media.now_playing
+what am I watching	media.now_playing
+what is currently playing	media.now_playing
+now playing	media.now_playing
+name that song	media.now_playing
+play at 1.25x	media.speed	speed=1.25
+set speed to 1.5x	media.speed	speed=1.5
+playback speed 2x	media.speed	speed=2.0
+speed it up to 1.5x	media.speed	speed=1.5
+slow it down	media.speed	speed=0.75
+set it to normal speed	media.speed	speed=1.0
+like this video	media.like
+thumbs up this song	media.like
+heart this track	media.like
+add this song to my liked songs	media.like
+save this song to favorites	media.like
+play bohemian rhapsody on spotify	media.play_search	query=bohemian rhapsody;app=spotify
+play jazz music on youtube music	media.play_search	query=jazz music;app=ytmusic
+search spotify for coldplay	media.play_search	app=spotify;query=coldplay
+look up youtube for python tutorial	media.play_search	app=youtube;query=python tutorial
+play relaxing rain sounds	media.play_search	query=relaxing rain sounds
+put on classical music	media.play_search	query=classical music
+I want to listen to pink floyd	media.play_search	query=pink floyd
+set volume to 70 percent	volume.set	level=70
+turn volume to 25%	volume.set	level=25
+change media volume to 80	volume.set	level=80
+volume 100%	volume.set	level=100
+set the volume to half	volume.set	level=50
+volume twenty five percent	volume.set	level=25
+turn it up	volume.up
+turn up the volume	volume.up
+make it louder	volume.up
+increase the volume	volume.up
+raise the volume	volume.up
+crank it up	volume.up
+increase volume by 20 percent	volume.up
+louder please	volume.up
+volume down	volume.down
+softer	volume.down
+quieter	volume.down
+turn down the volume	volume.down
+make it quieter	volume.down
+decrease the volume	volume.down
+lower the volume	volume.down
+reduce volume by 10%	volume.down
+mute the media	volume.mute
+mute the volume	volume.mute
+mute it	volume.mute
+unmute	volume.unmute
+unmute the volume	volume.unmute
+unmute the music	volume.unmute
+silent mode	ringer.mode	mode=silent
+switch to silent mode	ringer.mode	mode=silent
+put my phone on vibrate	ringer.mode	mode=vibrate
+set ringer to normal	ringer.mode	mode=normal
+ring mode	ringer.mode	mode=ring
+silence my phone	ringer.mode	mode=silent
+unmute my phone	ringer.mode	mode=normal
+turn on vibrate mode	ringer.mode	mode=vibrate
+turn on dnd	dnd.set	state=on
+turn off do not disturb	dnd.set	state=off
+enable dnd mode	dnd.set	state=on
+disable dnd	dnd.set	state=off
+dnd on	dnd.set	state=on
+dnd off	dnd.set	state=off
+flashlight on	torch.set	state=on
+turn off the torch	torch.set	state=off
+switch on the flashlight	torch.set	state=on
+torch on	torch.set	state=on
+open the flashlight	torch.set	state=on
+close the torch	torch.set	state=off
+torch	torch.set	state=toggle
+set an alarm for 8:00	alarm.set	time=8:00
+set alarm for 9:15 am	alarm.set	time=9:15
+wake me up at 6:45	alarm.set	time=6:45
+wake me at 10 pm	alarm.set	time=22:00
+set an alarm for tomorrow at 7:30	alarm.set	time=7:30
+create a new alarm for 5:30 pm	alarm.set	time=17:30
+alarm for 6 am	alarm.set	time=6:00
+set a timer for 15 minutes	timer.set	duration=900000
+timer for 30 seconds	timer.set	duration=30000
+start a 10 minute timer	timer.set	duration=600000
+5 minute timer	timer.set	duration=300000
+count down from 2 minutes	timer.set	duration=120000
+set timer for 1 hour	timer.set	duration=3600000
+timer 45 seconds	timer.set	duration=45000
+stop the alarm	alarm.dismiss
+turn off the alarm	alarm.dismiss
+cancel the alarm	alarm.dismiss
+silence alarm	alarm.dismiss
+snooze the alarm	alarm.snooze
+snooze it	alarm.snooze
+snooze for 5 minutes	alarm.snooze
+remind me in 10 minutes to check the oven	reminder.set	duration=600000;text=check the oven
+remind me in 2 hours to take medicine	reminder.set	duration=7200000;text=take medicine
+remind me to call Ali in 30 minutes	reminder.set	text=call Ali;duration=1800000
+remind me at 8 pm to lock the door	reminder.set	time=20:00;text=lock the door
+remind me to pay the bill at 10 am	reminder.set	text=pay the bill;time=10:00
+set a reminder in 15 minutes to join the meeting	reminder.set	duration=900000;text=join the meeting
+remind me to buy bread	reminder.set	text=buy bread
+add milk to shopping list	list.add	item=milk;list=shopping
+put bread on my grocery list	list.add	item=bread;list=grocery
+add finish report to my todo list	list.add	item=finish report;list=todo
+put batteries on the shopping list	list.add	item=batteries;list=shopping
+what is on my shopping list	list.read	list=shopping
+read my todo list	list.read	list=todo
+check my grocery list	list.read	list=grocery
+show me my packing list	list.read	list=packing
+what do I need to buy	list.read	list=shopping
+note buy coffee beans	note.add	note=buy coffee beans
+write down gate code is 4512	note.add	note=gate code is 4512
+make a note that car is on floor 2	note.add	note=car is on floor 2
+remember that the spare key is in the drawer	note.add	note=the spare key is in the drawer
+save a note call the plumber tomorrow	note.add	note=call the plumber tomorrow
+show my notes	note.read
+tell me my latest notes	note.read
+read my last note	note.read
+what did I note	note.read
+what is 25 plus 37	calc
+calculate 144 divided by 12	calc
+how much is 15 percent of 800	calc
+what is 12 times 9	calc
+convert 10 km to miles	calc
+convert 100 usd to pkr	calc
+convert 72 f to c	calc
+how is the weather today	weather
+what's the weather like now	weather	when=now
+weather tomorrow	weather	when=tomorrow
+weather tonight	weather	when=tonight
+is it going to rain today	weather	when=today
+will it rain tonight	weather	when=tonight
+how hot is it outside	weather
+what is the temperature outside	weather
+forecast for tomorrow	weather	when=tomorrow
+do I need an umbrella today	weather	when=today
+what's on my schedule today	calendar.agenda	day=today
+what is my agenda for tomorrow	calendar.agenda	day=tomorrow
+any meetings today	calendar.agenda	day=today
+are there any events tomorrow	calendar.agenda	day=tomorrow
+what is next on my calendar	calendar.agenda
+my schedule for today	calendar.agenda	day=today
+what do I have tomorrow	calendar.agenda	day=tomorrow
+drive to Islamabad	nav.go	place=Islamabad
+take me to the train station	nav.go	place=the train station
+directions to Centaurus Mall	nav.go	place=Centaurus Mall
+navigate to Lahore	nav.go	place=Lahore
+go home	nav.go	place=home
+take me home	nav.go	place=home
+open whatsapp	app.open	appname=whatsapp
+launch gmail	app.open	appname=gmail
+open youtube	app.open	appname=youtube
+start settings	app.open	appname=settings
+open camera	app.open	appname=camera
+lock my phone	device.lock
+lock the screen	device.lock
+lock it	device.lock
+screenshot	device.screenshot
+capture a screenshot	device.screenshot
+grab a screenshot	device.screenshot
+go to the home screen	device.home
+home screen	device.home
+go back	device.back
+back	device.back
+help	meta.help
+what are your commands	meta.help
+how can you help me	meta.help
+what can I say	meta.help
+repeat	meta.repeat
+repeat that	meta.repeat
+say again	meta.repeat
+pardon	meta.repeat
+what did you say	meta.repeat
+nevermind	meta.cancel
+forget it	meta.cancel
+cancel that	meta.cancel
+stop talking	meta.cancel
+be quiet	meta.cancel
+yeah	meta.yes
+yep	meta.yes
+sure	meta.yes
+confirm	meta.yes
+do it	meta.yes
+send it	meta.yes
+go ahead	meta.yes
+sounds good	meta.yes
+nope	meta.no
+nah	meta.no
+do not send it	meta.no
+no thanks	meta.no
+first	meta.choose	index=0
+the second one	meta.choose	index=1
+third	meta.choose	index=2
+the last one	meta.choose	index=-1
+more	list.more
+keep going	list.more
+read the rest	list.more
+read more	list.more
+go on	list.more
+summarize my unread emails	llm.summarize	app=gmail
+summarise the chat with Abdullah	llm.summarize	contact=Abdullah
+give me a summary of my whatsapp	llm.summarize	app=whatsapp
+sum up my notifications	llm.summarize
+hey what time is it	time.now
+ok agent what is the date today	date.today
+please check my battery	battery.status
+can you pause the music	media.pause
+could you turn on the flashlight	torch.set	state=on
+hey can you read my whatsapp	notif.read	app=whatsapp
+please tell Abdullah I'm on the way	msg.send	contact=Abdullah;message=I'm on the way
+could you set a timer for 5 minutes	timer.set	duration=300000
+for me turn up the volume	volume.up
+please skip this song	media.next
+hey tell me what's playing	media.now_playing
+can you call mom	call.contact	contact=mom
+please lock the phone	device.lock
+could you open spotify	app.open	appname=spotify
+hey set an alarm for 7 am	alarm.set	time=7:00
+please remind me in 10 minutes to call Ali	reminder.set	duration=600000;text=call Ali
+can you add butter to my shopping list	list.add	item=butter;list=shopping
+please read my notes	note.read
+hey what's the weather tomorrow	weather	when=tomorrow
+could you navigate to the airport	nav.go	place=the airport
+please mute the media	volume.mute
+can you turn on do not disturb	dnd.set	state=on
+hey dismiss the alarm	alarm.dismiss
+please snooze	alarm.snooze
+can you clear my notifications	notif.clear
+please mark it as read	notif.mark_read
+hey archive it	notif.archive
+could you answer the call	call.answer
+please hang up	call.end
+can you check my missed calls	call.missed
+hey forward 45 seconds	media.seek_relative	duration=45000;direction=forward
+please rewind 20 seconds	media.seek_relative	duration=20000;direction=back
+can you go to 4:10	media.seek_absolute	position=250000
+hey like this song	media.like
+please play at 1.5x	media.speed	speed=1.5
+can you resume the video	media.play
+hey previous song	media.previous
+please put my phone on silent	ringer.mode	mode=silent
+can you unmute the volume	volume.unmute
+hey volume 60%	volume.set	level=60
+please turn it down	volume.down
+what time is it in Dubai right now	time.in_city	city=Dubai
+how many days until Christmas	date.days_until
+any new messages from Ali	notif.read	contact=Ali
+did Sara message me	notif.read	contact=Sara
+tell Sara I will be 5 minutes late	msg.send	contact=Sara;message=I will be 5 minutes late
+reply I am outside to mom	msg.send	message=I am outside;contact=mom
+text Abdullah I reached	msg.send	contact=Abdullah;message=I reached
+message Ali on whatsapp see you soon	msg.send	contact=Ali;app=whatsapp;message=see you soon
+call Sara on whatsapp	call.contact	contact=Sara;app=whatsapp
+play coke studio on youtube	media.play_search	query=coke studio;app=youtube
+search youtube for cooking recipes	media.play_search	app=youtube;query=cooking recipes
+set timer for 3 minutes	timer.set	duration=180000
+set alarm for 6:15 am	alarm.set	time=6:15
+remind me at 9 pm to study	reminder.set	time=21:00;text=study
+note dentist appointment on Monday	note.add	note=dentist appointment on Monday
+add sugar to grocery list	list.add	item=sugar;list=grocery
+read my grocery list	list.read	list=grocery
+what is 10 percent of 500	calc
+what's on my calendar tomorrow	calendar.agenda	day=tomorrow
+open telegram	app.open	appname=telegram
+take me to work	nav.go	place=work
+take a screenshot please	device.screenshot
+summarize my whatsapp	llm.summarize	app=whatsapp
+what can you do for me	meta.help
+read it again please	meta.repeat
+cancel it	meta.cancel
+yes do it	meta.yes
+no thanks	meta.no
+the first one	meta.choose	index=0
+continue reading	list.more
+what's the time in New York now	time.in_city	city=New York
+what is today's date please	date.today
+is today Sunday	day.today	day=sunday
+how much battery left	battery.status
+read my gmail notifications	notif.read	app=gmail
+any emails from Ali	notif.read	contact=Ali;app=gmail
+clear my telegram notifications	notif.clear	app=telegram
+mark Sara's messages as read	notif.mark_read	contact=Sara
+forward the video by 5 minutes	media.seek_relative	duration=300000;direction=forward
+go back 1 minute	media.seek_relative	duration=60000;direction=back
+jump to 0:30	media.seek_absolute	position=30000
+restart the song	media.seek_absolute	position=0
+pause the music please	media.pause
+resume playback	media.play
+skip this track	media.next
+play the previous track	media.previous
+what song is playing	media.now_playing
+normal speed please	media.speed	speed=1.0
+set volume to 30%	volume.set	level=30
+louder	volume.up
+quieter please	volume.down
+torch off please	torch.set	state=off
+turn off dnd please	dnd.set	state=off
+vibrate mode please	ringer.mode	mode=vibrate
+wake me up at 8 am	alarm.set	time=8:00
+10 minute timer	timer.set	duration=600000
+remind me in 5 minutes to stretch	reminder.set	duration=300000;text=stretch
+what's the weather today	weather	when=today
+will it rain tomorrow	weather	when=tomorrow
+do I have any meetings today	calendar.agenda	day=today
+call Ali Raza	call.contact	contact=Ali Raza
+who called me	call.missed
+open spotify please	app.open	appname=spotify
+directions to home	nav.go	place=home
+lock the screen please	device.lock
+go home	device.home
+go back please	device.back
+set brightness to 50%	brightness.set	level=50
+brightness up	brightness.up
+dim the screen	brightness.down
+kya time hua hai	time.now
+abhi kya time hai	time.now
+Dubai mein kya time hua hai	time.in_city	city=Dubai
+aaj ki tareekh kya hai	date.today
+aaj kaunsa din hai	day.today
+battery kitni hai	battery.status
+mere whatsapp messages parho	notif.read	app=whatsapp
+Abdullah ne kya kaha	notif.read	contact=Abdullah
+Abdullah ko bolo main aa raha hoon	msg.send	contact=Abdullah;message=main aa raha hoon
+Ali ko whatsapp karo see you soon	msg.send	contact=Ali;app=whatsapp;message=see you soon
+Abdullah ko call karo	call.contact	contact=Abdullah
+missed calls dikhao	call.missed
+call uthao	call.answer
+call kaato	call.end
+3 minutes aage karo	media.seek_relative	duration=180000;direction=forward
+30 seconds peeche karo	media.seek_relative	duration=30000;direction=back
+video roko	media.pause
+video chalao	media.play
+agla gaana	media.next
+pichla gaana	media.previous
+kya chal raha hai	media.now_playing
+awaz barhao	volume.up
+awaz kam karo	volume.down
+torch jalao	torch.set	state=on
+torch band karo	torch.set	state=off
+brightness 50% karo	brightness.set	level=50
+brightness barhao	brightness.up
+7 am ka alarm lagao	alarm.set	time=7:00
+5 minutes ka timer lagao	timer.set	duration=300000
+10 minutes baad yaad dilana call mom	reminder.set	duration=600000;text=call mom
+note likho parking level 3	note.add	note=parking level 3
+mere notes parho	note.read
+aaj mausam kaisa hai	weather
+spotify kholo	app.open	appname=spotify
+read the full email from Amazon	email.read_full	sender=Amazon
+reply to that email I received it	email.reply	message=I received it
+email Sara meeting at 5	email.reply	contact=Sara;message=meeting at 5

@@ -53,6 +53,12 @@ object AppGraph {
     lateinit var memories: SqliteMemoryStore
         private set
 
+    /** Hybrid Tier-1 local agent + media session hub (zero AI for simple commands). */
+    var mediaHub: com.phoneuse.local.MediaHub? = null
+        private set
+    var localAgent: com.phoneuse.local.LocalAgentEngine? = null
+        private set
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /**
@@ -135,7 +141,13 @@ object AppGraph {
             ConnectorStore(read = { settings.readSecret(it) }, write = { k, v -> settings.writeSecret(k, v) }),
             log = { android.util.Log.w("Connectors", it) },
         )
-        runner = AgentRunner(app, settings, http, chats, uiVisible, usage, memories, memories, SqliteConversationSearch(app), connectors)
+        val localStore = com.phoneuse.local.LocalAgentStore(app)
+        val notifHub = com.phoneuse.local.LiveNotificationHub.get(app)
+        val media = com.phoneuse.local.MediaHub(app)
+        mediaHub = media
+        val local = com.phoneuse.local.LocalAgentEngine(app, localStore, notifHub, media)
+        localAgent = local
+        runner = AgentRunner(app, settings, http, chats, uiVisible, usage, memories, memories, SqliteConversationSearch(app), connectors, local)
         // A run the previous process died in left its question unanswered: say so in that conversation.
         val startedAt = System.currentTimeMillis()
         scope.launch {

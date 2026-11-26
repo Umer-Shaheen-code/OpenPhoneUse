@@ -26,6 +26,10 @@
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <!-- set_alarm (AlarmClock.ACTION_SET_ALARM). -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <!-- Optional local brightness control; user grants "Modify system settings" only if desired. -->
+    <uses-permission
+        android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
     <!-- Asked for only when the photo tools are first used. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
@@ -50,6 +54,9 @@
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
         </intent>
         <!-- Speech recognizers for in-app voice input (VoiceRecognizer names Google's explicitly). -->
         <intent>

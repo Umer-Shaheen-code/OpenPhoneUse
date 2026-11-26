@@ -7,6 +7,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
+import com.phoneuse.local.LiveNotificationHub
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,11 +26,13 @@ class PhoneUseNotificationListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         instance = this
+        runCatching { LiveNotificationHub.get(applicationContext).onListenerConnected(activeNotifications, currentRanking) }
         prune()
     }
 
     override fun onListenerDisconnected() {
         if (instance === this) instance = null
+        runCatching { LiveNotificationHub.get(applicationContext).onListenerDisconnected() }
         // Access may have been revoked: nothing adds rows any more, so drop what is past the retention now.
         prune()
     }
@@ -50,6 +53,7 @@ class PhoneUseNotificationListener : NotificationListenerService() {
      */
     override fun onNotificationRemoved(sbn: StatusBarNotification?, rankingMap: RankingMap?, reason: Int) {
         val key = sbn?.key ?: return
+        runCatching { LiveNotificationHub.get(applicationContext).onRemoved(sbn, reason) }
         if (reason !in GONE_REASONS) return
         scope.launch {
             try {
@@ -66,7 +70,11 @@ class PhoneUseNotificationListener : NotificationListenerService() {
         super.onDestroy()
     }
 
-    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+    override fun onNotificationPosted(sbn: StatusBarNotification?, rankingMap: RankingMap?) {
+        if (sbn != null) {
+            val rank = rankingMap?.let { m -> Ranking().takeIf { m.getRanking(sbn.key, it) } }
+            runCatching { LiveNotificationHub.get(applicationContext).onPosted(sbn, rank) }
+        }
         val n = sbn?.let { stored(it) } ?: return
         com.phoneuse.routine.RoutineEngine.onNotification(n.packageName, n.title, n.text, n.postedAt)
         com.phoneuse.proactive.ProactiveSystem.onPhoneEvent(applicationContext)

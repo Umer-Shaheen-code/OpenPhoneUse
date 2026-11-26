@@ -153,6 +153,8 @@ class AgentRunner(
     private val conversationSearch: ConversationSearch,
     /** Connected MCP servers and Google; their tools are added to each run. */
     private val connectors: Connectors? = null,
+    /** Fast zero-AI local NLU + platform API router for everyday tasks. */
+    private val localAgent: com.phoneuse.local.LocalAgentEngine? = null,
 ) {
     private val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.Default +
@@ -454,6 +456,9 @@ class AgentRunner(
             }
 
             val backend = resolveBackend()
+            if (tryLocalFastPath(st, text, source, overlay, attachments, suggested, hasAiBackend = backend != null)) {
+                return
+            }
             if (backend == null) {
                 finishing = true
                 st.reply = msg.notSignedIn
@@ -667,6 +672,47 @@ class AgentRunner(
             st.reply = msg.error
             overlay.update(AgentEvent.Failed(msg.error))
         }
+    }
+
+    private suspend fun tryLocalFastPath(
+        st: RunState,
+        text: String,
+        source: Source,
+        overlay: OverlaySession,
+        attachments: List<Attachment>,
+        suggested: Boolean,
+        hasAiBackend: Boolean,
+    ): Boolean {
+        val engine = localAgent ?: return false
+        val confirmMode = settings.confirmMode.first()
+        val gate = RoutingUserGate(overlay.gate, chatGate) { overlay.active }
+        val outcome = engine.tryHandle(
+            text = text,
+            source = source,
+            hasAttachments = attachments.isNotEmpty(),
+            suggested = suggested,
+            hasAiBackend = hasAiBackend,
+            confirmMode = confirmMode,
+            gate = gate,
+        )
+        if (outcome !is com.phoneuse.local.LocalAgentOutcome.Handled) return false
+        outcome.steps.forEach { publishStep(st.runSteps, it) }
+        outcome.launchIntent?.let { launchIntent ->
+            runCatching {
+                (PhoneUseAccessibilityService.instance ?: context).startActivity(launchIntent)
+                if (source != Source.ASSIST) st.deviceUsed = true
+            }.onFailure { Log.w(TAG, "local intent launch failed", it) }
+        }
+        finishing = true
+        st.reply = outcome.reply
+        st.outcome = RunOutcome.FINISHED
+        st.stayInApp = outcome.stayInApp
+        overlay.update(AgentEvent.Finished(outcome.reply, outcome.stayInApp))
+        outcome.afterClose?.let { after ->
+            overlay.releaseNow()
+            runCatching { after() }.onFailure { Log.w(TAG, "local afterClose failed", it) }
+        }
+        return true
     }
 
     private fun hasMcpTools(tools: com.phoneuse.agent.ConnectorTools?): Boolean =

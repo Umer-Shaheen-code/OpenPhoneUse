@@ -46,6 +46,7 @@ class VoiceRecognizer(
 
     /** Listens in [languageTag]; with a Deepgram key and [http], Deepgram does the recognition instead of Android. */
     fun start(languageTag: String, http: OkHttpClient? = null, deepgramKey: String? = null) {
+        com.phoneuse.app.AppGraph.mediaHub?.takeSnapshot()
         if (http != null && !deepgramKey.isNullOrBlank()) {
             startDeepgram(languageTag, http, deepgramKey)
             return

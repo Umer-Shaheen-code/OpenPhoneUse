@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "PhoneUse"
-include(":app")
+include(":core", ":app")
