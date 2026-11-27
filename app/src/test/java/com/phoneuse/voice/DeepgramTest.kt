@@ -38,6 +38,9 @@ class DeepgramTest {
     @Test
     fun languageCodes() {
         assertEquals("en-US", Deepgram.languageCode("en-US"))
+        assertEquals("en-GB", Deepgram.languageCode("en-GB"))
+        // A Pakistani English phone: Deepgram refuses en-PK, so plain English.
+        assertEquals("en", Deepgram.languageCode("en-PK"))
         assertEquals("ur", Deepgram.languageCode("ur-PK"))
         assertEquals("hi", Deepgram.languageCode("hi-IN"))
         assertEquals("ko", Deepgram.languageCode("ko-KR"))

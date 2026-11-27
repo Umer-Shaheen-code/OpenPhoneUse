@@ -73,8 +73,14 @@ object Deepgram {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Deepgram's language code: English keeps its region (en-US), other languages use the bare code (ur, hi, ko). */
-    fun languageCode(tag: String): String = if (tag.startsWith("en")) tag else tag.substringBefore('-')
+    /** English regions Nova-3 accepts; any other (en-PK, a common phone setting) is refused with 400, so it sends plain "en". */
+    private val ENGLISH_REGIONS = setOf("en-US", "en-GB", "en-AU", "en-IN", "en-NZ", "en-CA")
+
+    /** Deepgram's language code: English keeps a region Nova-3 knows, other languages use the bare code (ur, hi, ko). */
+    fun languageCode(tag: String): String {
+        val lang = tag.substringBefore('-')
+        return if (lang == "en" && tag in ENGLISH_REGIONS) tag else lang
+    }
 
     fun listenUrl(languageTag: String): String =
         "wss://api.deepgram.com/v1/listen?model=nova-3&language=${languageCode(languageTag)}" +
