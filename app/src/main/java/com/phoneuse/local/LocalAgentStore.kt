@@ -19,15 +19,19 @@ class LocalAgentStore(context: Context) {
     }
 
     @Synchronized fun list(name: String): List<String> =
-        obj("lists").optJSONArray(name.lowercase())?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
+        (obj("lists").optJSONArray(name.lowercase())?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList())
+            .distinctBy { it.trim().lowercase() } // lists saved before addToList skipped repeats may hold them
 
-    @Synchronized fun addToList(name: String, item: String) {
+    /** Adds [item] unless the list already has it (case and spaces ignored); returns whether it was added. */
+    @Synchronized fun addToList(name: String, item: String): Boolean {
+        if (list(name).any { it.trim().equals(item.trim(), ignoreCase = true) }) return false
         val o = obj("lists")
         val key = name.lowercase()
         val a = o.optJSONArray(key) ?: JSONArray()
         a.put(item)
         o.put(key, a)
         prefs.edit().putString("lists", o.toString()).apply()
+        return true
     }
 
     @Synchronized fun aliases(): Map<String, String> =

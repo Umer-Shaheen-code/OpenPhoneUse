@@ -389,7 +389,7 @@ class AgentRunner(
                     EndOfRun(
                         overlay, st.progress, st.conversation, st.reply, st.sources, st.searchCount(),
                         st.usedMemories, st.remembered.toList(), st.forgotten.toList(), st.runSteps.toList(), st.runCards.toList(),
-                        st.runExecutor?.thirdPartySeen == true, st.cancelled, source, st.learned, st.tipsOn, st.modelCalls.get(),
+                        st.runExecutor?.thirdPartySeen == true || st.localThirdParty, st.cancelled, source, st.learned, st.tipsOn, st.modelCalls.get(),
                         st.deviceUsed, st.stayInApp, st.outcome, st.runTitle, routine, st.serviceLost.get(), st.failureCode, st.voice,
                         st.voice && st.ackedAt == st.acts,
                     ),
@@ -595,7 +595,7 @@ class AgentRunner(
             )
             steps = st.runSteps
             steering = queue
-            loop.run(history, message.text, observeFirst = source == Source.ASSIST, images = message.images, attached = attachments.isNotEmpty(), note = AgentPrompt.withVoice(memoryNote, st.voice)).collect { event ->
+            loop.run(history, message.text, observeFirst = source == Source.ASSIST, images = message.images, attached = attachments.isNotEmpty(), note = AgentPrompt.withVoice(AgentPrompt.withLanguage(memoryNote, text), st.voice)).collect { event ->
                 when (event) {
                     AgentEvent.Thinking -> {
                         st.modelCalls.incrementAndGet()
@@ -697,6 +697,7 @@ class AgentRunner(
         )
         if (outcome !is com.phoneuse.local.LocalAgentOutcome.Handled) return false
         outcome.steps.forEach { publishStep(st.runSteps, it) }
+        st.localThirdParty = outcome.thirdParty
         outcome.launchIntent?.let { launchIntent ->
             runCatching {
                 (PhoneUseAccessibilityService.instance ?: context).startActivity(launchIntent)
@@ -771,6 +772,8 @@ class AgentRunner(
         val sources = LinkedHashMap<String, SourceLink>()
         val modelCalls = AtomicInteger(0)
         @Volatile var deviceUsed = false
+        /** The local fast path read notification text into the reply. */
+        @Volatile var localThirdParty = false
         // How the run ended and finish's stay_in_app; they decide whether the chat comes back (ReturnPolicy).
         @Volatile var outcome = RunOutcome.FAILED
         @Volatile var failureCode: String? = null

@@ -78,6 +78,7 @@ sealed interface LocalAgentOutcome {
         val stayInApp: Boolean = false,
         val listenAgain: Boolean = false,
         val afterClose: (suspend () -> Unit)? = null,
+        val thirdParty: Boolean = false,
     ) : LocalAgentOutcome
 
     data class Escalate(val reason: String) : LocalAgentOutcome
@@ -176,6 +177,7 @@ class LocalAgentEngine(
                     stayInApp = execResult.stayInApp,
                     listenAgain = execResult.listenAgain,
                     afterClose = execResult.afterClose,
+                    thirdParty = execResult.thirdParty,
                 )
             }
         }

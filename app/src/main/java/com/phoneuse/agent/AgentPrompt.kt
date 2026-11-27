@@ -194,6 +194,17 @@ object AgentPrompt {
         }
     }
 
+    const val NOT_KOREAN_NOTE =
+        "Language: the user's message is not in Korean. Write every reply, question and finish summary in the language of the user's message, never in Korean."
+
+    /**
+     * [note] plus [NOT_KOREAN_NOTE] when [text] has letters but no Hangul: the Korean examples in the instructions
+     * pulled weaker models into Korean replies to English messages.
+     */
+    fun withLanguage(note: String?, text: String): String? =
+        if (text.none { it.isLetter() } || text.any { it in '가'..'힣' || it in 'ㄱ'..'ㆎ' }) note
+        else listOfNotNull(note, NOT_KOREAN_NOTE).joinToString("\n\n")
+
     /** [note] plus voice mode's reply rule when the command was spoken ([voice]). */
     fun withVoice(note: String?, voice: Boolean): String? =
         if (!voice) note else listOfNotNull(note, com.phoneuse.voice.VoiceMode.NOTE).joinToString("\n\n")

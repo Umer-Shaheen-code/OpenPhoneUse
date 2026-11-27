@@ -753,3 +753,4 @@ spotify kholo	app.open	appname=spotify
 read the full email from Amazon	email.read_full	sender=Amazon
 reply to that email I received it	email.reply	message=I received it
 email Sara meeting at 5	email.reply	contact=Sara;message=meeting at 5
+text Sara saying ok see you	msg.send	contact=Sara;message=ok see you

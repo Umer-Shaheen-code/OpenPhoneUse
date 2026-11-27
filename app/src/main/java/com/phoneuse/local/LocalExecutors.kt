@@ -68,6 +68,8 @@ sealed interface LocalExecResult {
         val stayInApp: Boolean = false,
         val listenAgain: Boolean = false,
         val afterClose: (suspend () -> Unit)? = null,
+        /** The reply quotes text the user did not write (notifications): the conversation must be tainted. */
+        val thirdParty: Boolean = false,
     ) : LocalExecResult
 
     /** Pre-execution miss (e.g., unknown app, missing reply handle, complex query): seamlessly hand off to AI. */
@@ -537,7 +539,7 @@ internal class LocalExecutors(
     private fun listAdd(cmd: ParsedCommand): LocalExecResult {
         val item = cmd.text("item") ?: return LocalExecResult.Done("Add what?", listenAgain = true)
         val list = normalizeList(cmd.text("list") ?: "shopping")
-        store.addToList(list, item)
+        if (!store.addToList(list, item)) return LocalExecResult.Done("$item is already on your $list list.")
         return LocalExecResult.Done("Added $item to your $list list.")
     }
 
@@ -814,7 +816,7 @@ internal class LocalExecutors(
         } else if (remaining.isNotEmpty()) {
             text += " Say continue for more."
         }
-        return LocalExecResult.Done(text, listenAgain = offer || remaining.isNotEmpty())
+        return LocalExecResult.Done(text, listenAgain = offer || remaining.isNotEmpty(), thirdParty = spoken.convKeys.isNotEmpty())
     }
 
     private fun moreNotifications(tx: LocalTurnContext): LocalExecResult {
@@ -831,7 +833,7 @@ internal class LocalExecutors(
             notifications.get(k)?.let { tx.dialog.lastConvKey = k; tx.dialog.lastContactName = it.title }
         }
         val suffix = if (tx.dialog.readQueue.isNotEmpty()) " Say continue for more." else ""
-        return LocalExecResult.Done(spoken.text + suffix, listenAgain = tx.dialog.readQueue.isNotEmpty())
+        return LocalExecResult.Done(spoken.text + suffix, listenAgain = tx.dialog.readQueue.isNotEmpty(), thirdParty = true)
     }
 
     private suspend fun sendMessage(cmd: ParsedCommand, tx: LocalTurnContext): LocalExecResult {

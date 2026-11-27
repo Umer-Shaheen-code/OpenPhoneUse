@@ -132,4 +132,11 @@ class AgentPromptTest {
         assertFalse("가".repeat(501) in prompt)
         assertTrue("가".repeat(500) in prompt)
     }
+
+    @Test fun nonKoreanMessageGetsLanguageNote() {
+        assertEquals(AgentPrompt.NOT_KOREAN_NOTE, AgentPrompt.withLanguage(null, "turn on dark mode"))
+        assertEquals("mem\n\n" + AgentPrompt.NOT_KOREAN_NOTE, AgentPrompt.withLanguage("mem", "alarm lagao"))
+        assertEquals("mem", AgentPrompt.withLanguage("mem", "다크 모드 켜줘"))
+        assertNull(AgentPrompt.withLanguage(null, "123 + 4"))
+    }
 }

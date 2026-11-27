@@ -118,7 +118,7 @@ object CommandGrammar {
             p("reply to {contact} [(on|via|in|over) {app}]")
             p("reply [back] [(saying|with|that)] {message}", w = 0.92)
             p("reply")
-            p("(tell|text|message|msg|whatsapp|ping) {contact} [(on|via|in|over) {app}] [that] {message}")
+            p("(tell|text|message|msg|whatsapp|ping) {contact} [(on|via|in|over) {app}] [saying|that] {message}")
             p("(tell|ask) {contact} to {message}", w = 0.95)
             p("send {message} to {contact} [(on|via|in|over) {app}]", w = 0.97)
             p("send [a|an] [{app}] [message|text|msg] to {contact} [(on|via|in|over) {app}] [saying|that] {message}")
